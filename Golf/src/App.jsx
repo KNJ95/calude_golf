@@ -126,8 +126,9 @@ const SELF_RATINGS = [
 const OUTCOMES = [
   { id: "in_play", label: "セーフ", tone: "ok" },
   { id: "ob", label: "OB", tone: "bad" },
-  { id: "penalty_yellow", label: "1ペナ", tone: "bad" },
   { id: "lost", label: "ロスト", tone: "bad" },
+  { id: "penalty_red", label: "赤杭", tone: "bad" },
+  { id: "penalty_yellow", label: "黄杭", tone: "bad" },
 ];
 
 // v1.0互換用：旧resultをマイグレーションするマップ
@@ -436,8 +437,9 @@ const SELF_RATING_LABELS = { good: "◎", ok: "○", miss: "△", bad: "×" };
 const OUTCOME_LABELS = {
   in_play: "セーフ",
   ob: "OB",
-  penalty_yellow: "1ペナ",
   lost: "ロスト",
+  penalty_red: "赤杭",
+  penalty_yellow: "黄杭",
 };
 const DIR_LABELS = { left: "左", straight: "直", right: "右" };
 const DEPTH_LABELS = { short: "ショート", pin: "ピン", over: "オーバー" };
@@ -869,6 +871,37 @@ function aggregateKPI(rounds) {
 }
 
 // ============================================================
+//  SHARED: BOTTOM NAV
+// ============================================================
+function BottomNav({ active, onNavigate }) {
+  return (
+    <nav className="bottom-nav">
+      <button
+        className={`nav-btn ${active === "home" ? "active" : ""}`}
+        onClick={() => onNavigate("home")}
+      >
+        <Flag size={20} />
+        <span>ラウンド</span>
+      </button>
+      <button
+        className={`nav-btn ${active === "analytics" ? "active" : ""}`}
+        onClick={() => onNavigate("analytics")}
+      >
+        <BarChart3 size={20} />
+        <span>分析</span>
+      </button>
+      <button
+        className={`nav-btn ${active === "clubs" ? "active" : ""}`}
+        onClick={() => onNavigate("clubs")}
+      >
+        <Settings size={20} />
+        <span>クラブ</span>
+      </button>
+    </nav>
+  );
+}
+
+// ============================================================
 //  ROOT APP
 // ============================================================
 export default function App() {
@@ -952,9 +985,6 @@ export default function App() {
             state={state}
             setState={setState}
             onOpenRound={(id) => setView({ name: "round", roundId: id })}
-            onOpenAnalytics={() => setView({ name: "analytics" })}
-            onOpenCourses={() => setView({ name: "courses" })}
-            onOpenClubs={() => setView({ name: "clubs" })}
             onOpenTutorial={() => setShowTutorial(true)}
           />
         )}
@@ -1015,6 +1045,13 @@ export default function App() {
           />
         )}
       </div>
+      {/* 下部ナビは home / analytics / clubs / courses で表示、round では非表示 */}
+      {view.name !== "round" && (
+        <BottomNav
+          active={view.name}
+          onNavigate={(name) => setView({ name })}
+        />
+      )}
       {showTutorial && <Tutorial onClose={closeTutorial} />}
     </div>
   );
@@ -1027,9 +1064,6 @@ function HomeView({
   state,
   setState,
   onOpenRound,
-  onOpenAnalytics,
-  onOpenCourses,
-  onOpenClubs,
   onOpenTutorial,
 }) {
   const [showNew, setShowNew] = useState(false);
@@ -1157,25 +1191,6 @@ function HomeView({
           </div>
         )}
       </div>
-
-      <nav className="bottom-nav">
-        <button className="nav-btn active">
-          <Flag size={20} />
-          <span>ラウンド</span>
-        </button>
-        <button className="nav-btn" onClick={onOpenAnalytics}>
-          <BarChart3 size={20} />
-          <span>分析</span>
-        </button>
-        <button className="nav-btn" onClick={onOpenCourses}>
-          <MapPin size={20} />
-          <span>コース</span>
-        </button>
-        <button className="nav-btn" onClick={onOpenClubs}>
-          <Settings size={20} />
-          <span>クラブ</span>
-        </button>
-      </nav>
 
       {showNew && (
         <NewRoundSheet
@@ -2142,10 +2157,6 @@ function HoleScoreInput({ hole, onChange }) {
     }
   };
 
-  // ショット数とスコアの食い違い警告（任意・無視可能）
-  const shotCount = (hole.shots || []).length;
-  const showMismatch = score && shotCount > 0 && Math.abs(score - shotCount) > 0;
-
   // 対パー
   const diff = score ? score - par : null;
   const diffLabel =
@@ -2223,12 +2234,6 @@ function HoleScoreInput({ hole, onChange }) {
           +
         </button>
       </div>
-
-      {showMismatch && (
-        <div className="score-mismatch-note">
-          ⚠️ 記録{shotCount}打 ⇄ スコア{score}打。ペナや打ち直しを含めて入力してください
-        </div>
-      )}
     </div>
   );
 }
@@ -4526,7 +4531,7 @@ function Style() {
         border-top: 1px solid var(--border-soft);
         display: flex; justify-content: space-around;
         padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
-        z-index: 10;
+        z-index: 200; /* 最前面（モーダル backdrop 20 / tutorial 100 より上） */
       }
       @media (min-width: 600px) {
         .bottom-nav { max-width: 430px; }
@@ -5039,17 +5044,6 @@ function Style() {
       .score-input-num:focus {
         border-color: var(--green);
       }
-      .score-mismatch-note {
-        margin-top: 4px;
-        padding: 4px 8px;
-        background: rgba(255,184,77,0.08);
-        border-radius: 6px;
-        font-size: 10px;
-        color: var(--amber);
-        text-align: center;
-        line-height: 1.4;
-      }
-
       /* FAB の位置をスコアバー分上にずらす */
       .fab {
         position: fixed;
