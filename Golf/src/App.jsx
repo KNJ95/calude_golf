@@ -3226,8 +3226,10 @@ function CourseEditor({ existing, unit, onCancel, onSave }) {
 //  CLUBS MANAGEMENT
 // ============================================================
 function ClubsView({ state, setState, onBack }) {
-  const [editingId, setEditingId] = useState(null);
+  const [editingId, setEditingId] = useState(null); // 距離編集中のクラブID
   const [draftDistance, setDraftDistance] = useState("");
+  const [editingNameId, setEditingNameId] = useState(null); // 名前編集中のクラブID
+  const [draftName, setDraftName] = useState("");
   const [showAdd, setShowAdd] = useState(false);
 
   const updateClub = (id, patch) => {
@@ -3272,6 +3274,27 @@ function ClubsView({ state, setState, onBack }) {
   const saveDistance = (id) => {
     const num = draftDistance === "" ? null : Number(draftDistance);
     updateClub(id, { avgDistance: num });
+    setEditingId(null);
+    setDraftDistance("");
+  };
+
+  const saveName = (id) => {
+    const trimmed = draftName.trim();
+    if (trimmed === "") {
+      // 空欄は無効、編集モードを抜けるだけで変更しない
+      setEditingNameId(null);
+      setDraftName("");
+      return;
+    }
+    updateClub(id, { name: trimmed });
+    setEditingNameId(null);
+    setDraftName("");
+  };
+
+  const startEditName = (club) => {
+    setEditingNameId(club.id);
+    setDraftName(club.name);
+    // 距離側の編集中なら閉じる
     setEditingId(null);
     setDraftDistance("");
   };
@@ -3343,7 +3366,32 @@ function ClubsView({ state, setState, onBack }) {
             <div className="club-mgmt-group-label">{g.label}</div>
             {g.items.map((c) => (
               <div key={c.id} className="club-mgmt-row">
-                <div className="club-mgmt-name">{c.name}</div>
+                {editingNameId === c.id ? (
+                  <input
+                    type="text"
+                    className="club-mgmt-name-input"
+                    autoFocus
+                    value={draftName}
+                    placeholder="クラブ名"
+                    onChange={(e) => setDraftName(e.target.value)}
+                    onBlur={() => saveName(c.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveName(c.id);
+                      if (e.key === "Escape") {
+                        setEditingNameId(null);
+                        setDraftName("");
+                      }
+                    }}
+                  />
+                ) : (
+                  <button
+                    className="club-mgmt-name"
+                    onClick={() => startEditName(c)}
+                    aria-label="クラブ名を編集"
+                  >
+                    {c.name}
+                  </button>
+                )}
                 {editingId === c.id ? (
                   <div className="club-mgmt-edit">
                     <input
@@ -3591,40 +3639,6 @@ function Tutorial({ onClose }) {
         </>
       ),
     },
-    {
-      title: "ホーム画面に追加",
-      subtitle: "iPhoneのアプリとして使う",
-      preview: <TutorialPreviewInstall />,
-      desc: (
-        <>
-          <p>
-            iPhoneのSafariから<b>ホーム画面に追加</b>
-            すると、ネイティブアプリのようにフルスクリーンで使えます。
-          </p>
-          <ol className="tutorial-steps-list">
-            <li>
-              Safari下部の<b>･･･</b>をタップ
-            </li>
-            <li>
-              Safari下部の<b>共有ボタン</b>をタップ
-            </li>
-            <li>
-              <b>メニューを下にスクロールする</b>
-            </li>
-            <li>
-              <b>ホーム画面に追加 </b>をクリック
-            </li>
-            <li>
-              名前を確認して<b>「追加」</b>をタップ
-            </li>
-          </ol>
-          <p className="tip">
-            💡
-            ホーム画面のアイコンから起動すれば、Safariのアドレスバー無しで使え、画面も広く使えます。
-          </p>
-        </>
-      ),
-    },
   ];
 
   const isLast = step === steps.length - 1;
@@ -3829,35 +3843,6 @@ function TutorialPreviewClubs() {
           110<small>yd</small>
         </span>
         <span className="tp-club-trash">🗑</span>
-      </div>
-    </div>
-  );
-}
-
-function TutorialPreviewInstall() {
-  return (
-    <div className="tp-stage tp-install">
-      <div className="tp-iphone-frame">
-        <div className="tp-iphone-screen">
-          <div className="tp-iphone-content">
-            <div className="tp-iphone-card">
-              <div style={{ fontSize: "10px", color: "var(--text-faint)" }}>
-                my caddie...
-              </div>
-            </div>
-          </div>
-          <div className="tp-iphone-toolbar">
-            <span>‹</span>
-            <span>›</span>
-            <span className="tp-share-highlight">･･･</span>
-            <span>📑</span>
-            <span>⊞</span>
-          </div>
-        </div>
-      </div>
-      <div className="tp-arrow">↑</div>
-      <div className="tp-install-caption">
-        この共有ボタンから「ホーム画面に追加」
       </div>
     </div>
   );
@@ -5059,7 +5044,41 @@ function Style() {
         border-radius: 10px;
         margin-bottom: 4px;
       }
-      .club-mgmt-name { font-weight: 700; font-size: 14px; flex: 1; min-width: 0; }
+      .club-mgmt-name {
+        font-weight: 700;
+        font-size: 14px;
+        flex: 1;
+        min-width: 0;
+        text-align: left;
+        padding: 6px 8px 6px 0;
+        color: var(--text);
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .club-mgmt-name:active {
+        background: var(--bg-2);
+        border-radius: 6px;
+      }
+      .club-mgmt-name-input {
+        flex: 1;
+        min-width: 0;
+        padding: 6px 10px;
+        background: var(--bg-2);
+        border: 1px solid var(--green-dim);
+        border-radius: 8px;
+        color: var(--text);
+        font-size: 14px;
+        font-weight: 700;
+        font-family: inherit;
+        outline: none;
+      }
+      .club-mgmt-name-input:focus {
+        border-color: var(--green);
+      }
       .club-mgmt-distance {
         background: var(--bg-2); border-radius: 8px;
         padding: 6px 12px;
@@ -5898,108 +5917,6 @@ function Style() {
       .tp-club-trash {
         font-size: 11px;
         opacity: 0.6;
-      }
-
-      /* Install preview */
-      .tp-install {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 6px;
-      }
-      .tp-iphone-frame {
-        width: 120px;
-        height: 170px;
-        background: #1a1a1a;
-        border: 2px solid #333;
-        border-radius: 18px;
-        padding: 6px;
-        position: relative;
-      }
-      .tp-iphone-screen {
-        width: 100%;
-        height: 100%;
-        background: var(--bg-0);
-        border-radius: 12px;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-      }
-      .tp-iphone-content {
-        flex: 1;
-        padding: 6px;
-        display: flex;
-        align-items: flex-start;
-      }
-      .tp-iphone-card {
-        background: var(--bg-1);
-        border-radius: 4px;
-        padding: 4px 6px;
-        width: 100%;
-      }
-      .tp-iphone-toolbar {
-        display: flex;
-        justify-content: space-around;
-        align-items: center;
-        padding: 4px 0;
-        background: rgba(0,0,0,0.4);
-        font-size: 11px;
-        color: var(--text-dim);
-        border-top: 1px solid var(--border-soft);
-      }
-      .tp-share-highlight {
-        background: var(--green);
-        color: #0a0a0a !important;
-        width: 22px;
-        height: 22px;
-        border-radius: 6px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        animation: pulseGreen 1.6s ease-in-out infinite;
-      }
-      @keyframes pulseGreen {
-        0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(182,242,74,0.6); }
-        50% { transform: scale(1.08); box-shadow: 0 0 0 6px rgba(182,242,74,0); }
-      }
-      .tp-arrow {
-        font-size: 22px;
-        color: var(--green);
-        font-weight: 700;
-      }
-      .tp-install-caption {
-        font-size: 11px;
-        color: var(--text-dim);
-        text-align: center;
-      }
-
-      /* tutorial-steps-list (numbered steps inside description) */
-      .tutorial-steps-list {
-        list-style: decimal inside;
-        padding: 0;
-        margin: 8px 0;
-        background: var(--bg-2);
-        border-radius: 8px;
-        padding: 10px 12px;
-      }
-      .tutorial-steps-list li {
-        font-size: 12px;
-        color: var(--text-dim);
-        line-height: 1.7;
-        padding: 2px 0;
-      }
-      .tutorial-steps-list li::marker {
-        color: var(--green);
-        font-weight: 700;
-      }
-      .tutorial-desc p.tip {
-        background: rgba(94,184,255,0.06);
-        border: 1px solid rgba(94,184,255,0.2);
-        border-radius: 8px;
-        padding: 8px 10px;
-        font-size: 11px;
-        margin-top: 8px;
       }
 
       /* CodeSandbox banner spacer override - apply only when running inside CSB iframe */
