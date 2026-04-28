@@ -210,13 +210,6 @@ function trimmedMean(arr, trim = 0.1) {
 }
 
 // ===== コースマスターヘルパー =====
-function getAllVenues(courseMastersOverride) {
-  const fromDefault = DEFAULT_COURSES.map((c) => c.venue);
-  const fromOverride = (courseMastersOverride || []).map((c) => c.venue);
-  const set = new Set([...fromDefault, ...fromOverride]);
-  const merged = [...set, ...COURSES.filter((c) => !set.has(c))];
-  return merged;
-}
 
 // venueに紐づくティー一覧（重複排除）
 function getTeesForVenue(venue, courseMastersOverride) {
@@ -249,11 +242,6 @@ function getCoursesForVenueAndTee(venue, tee, courseMastersOverride) {
     }
   });
   return result;
-}
-
-// 旧API互換（teeを問わない）
-function getCoursesForVenue(venue, courseMastersOverride) {
-  return getCoursesForVenueAndTee(venue, null, courseMastersOverride);
 }
 
 function findCourseMaster(venue, courseName, tee, courseMastersOverride) {
@@ -2817,7 +2805,12 @@ function KpiRow({ label, recent, all, unit = "", lowerIsBetter = false }) {
 // ============================================================
 function CoursesView({ state, setState, onBack }) {
   const [showEditor, setShowEditor] = useState(null); // null | 'new' | { venue, course, tee } (edit)
-  const userMasters = state.courseMasters || [];
+
+  // userMastersをメモ化（state.courseMastersが未定義のときに新配列を毎回作らないように）
+  const userMasters = useMemo(
+    () => state.courseMasters || [],
+    [state.courseMasters]
+  );
 
   // 統合一覧：DEFAULT_COURSES + userMasters（venue+course+tee重複時はuserMasters優先）
   const merged = useMemo(() => {
@@ -3727,42 +3720,6 @@ function TutorialPreviewWelcome() {
           <b>14</b>
           <span>clubs</span>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function TutorialPreviewHome() {
-  return (
-    <div className="tp-stage">
-      <div className="tp-cta">＋ 新しいラウンド</div>
-      <div className="tp-section-label">ラウンド履歴</div>
-      <div className="tp-card">
-        <div>
-          <div className="tp-card-date">2025.10.15</div>
-          <div className="tp-card-name">グレート札幌【PGM】</div>
-          <div className="tp-card-meta">レギュラー · 18/18 holes</div>
-        </div>
-        <div className="tp-card-score">
-          <b>92</b>
-          <span>shots</span>
-        </div>
-      </div>
-      <div className="tp-card faded">
-        <div>
-          <div className="tp-card-date">2025.10.01</div>
-          <div className="tp-card-name">石狩平原CC</div>
-        </div>
-        <div className="tp-card-score">
-          <b>96</b>
-          <span>shots</span>
-        </div>
-      </div>
-      <div className="tp-tabbar">
-        <span className="on">ラウンド</span>
-        <span>分析</span>
-        <span>コース</span>
-        <span>クラブ</span>
       </div>
     </div>
   );
