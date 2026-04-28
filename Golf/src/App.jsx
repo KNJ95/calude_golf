@@ -126,9 +126,8 @@ const SELF_RATINGS = [
 const OUTCOMES = [
   { id: "in_play", label: "セーフ", tone: "ok" },
   { id: "ob", label: "OB", tone: "bad" },
+  { id: "penalty_yellow", label: "1ペナ", tone: "bad" },
   { id: "lost", label: "ロスト", tone: "bad" },
-  { id: "penalty_red", label: "赤杭", tone: "bad" },
-  { id: "penalty_yellow", label: "黄杭", tone: "bad" },
 ];
 
 // v1.0互換用：旧resultをマイグレーションするマップ
@@ -437,9 +436,8 @@ const SELF_RATING_LABELS = { good: "◎", ok: "○", miss: "△", bad: "×" };
 const OUTCOME_LABELS = {
   in_play: "セーフ",
   ob: "OB",
+  penalty_yellow: "1ペナ",
   lost: "ロスト",
-  penalty_red: "赤杭",
-  penalty_yellow: "黄杭",
 };
 const DIR_LABELS = { left: "左", straight: "直", right: "右" };
 const DEPTH_LABELS = { short: "ショート", pin: "ピン", over: "オーバー" };
