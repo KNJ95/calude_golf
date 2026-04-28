@@ -114,13 +114,31 @@ const LIES = [
   { id: "green", label: "グリーン" },
 ];
 
-const RESULTS = [
-  { id: "good", label: "◎", tone: "good" },
-  { id: "ok", label: "○", tone: "ok" },
-  { id: "miss", label: "△", tone: "miss" },
-  { id: "bad", label: "×", tone: "bad" },
-  { id: "ob", label: "OB", tone: "bad" },
+// 自己評価（感覚値）
+const SELF_RATINGS = [
+  { id: "good", label: "◎", tone: "good", desc: "完璧" },
+  { id: "ok", label: "○", tone: "ok", desc: "良い" },
+  { id: "miss", label: "△", tone: "miss", desc: "まあまあ" },
+  { id: "bad", label: "×", tone: "bad", desc: "ミス" },
 ];
+
+// 結果（事実）
+const OUTCOMES = [
+  { id: "in_play", label: "セーフ", tone: "ok" },
+  { id: "ob", label: "OB", tone: "bad" },
+  { id: "lost", label: "ロスト", tone: "bad" },
+  { id: "penalty_red", label: "赤杭", tone: "bad" },
+  { id: "penalty_yellow", label: "黄杭", tone: "bad" },
+];
+
+// v1.0互換用：旧resultをマイグレーションするマップ
+const LEGACY_RESULT_MAP = {
+  good: { selfRating: "good", outcome: "in_play" },
+  ok: { selfRating: "ok", outcome: "in_play" },
+  miss: { selfRating: "miss", outcome: "in_play" },
+  bad: { selfRating: "bad", outcome: "in_play" },
+  ob: { selfRating: null, outcome: "ob" }, // OBは自己評価未指定（事実のみ）
+};
 
 // ===== コースマスターデータ =====
 // 形式: { venue, course, holes: [{number, par, distance}, ...] }
@@ -147,6 +165,59 @@ function saveState(state) {
   } catch {}
 }
 
+// v1.0 → v2.0 マイグレーション
+// shot.result → shot.selfRating + shot.outcome
+// hole に manualScore を補完（未入力なら shots.length）
+function migrateState(state) {
+  if (!state || !state.rounds) return state;
+
+  let migrated = false;
+  const newRounds = state.rounds.map((round) => {
+    const newHoles = round.holes.map((hole) => {
+      // ショットのマイグレーション
+      const newShots = (hole.shots || []).map((shot) => {
+        // 既にv2.0形式（selfRating または outcome がある）ならそのまま
+        if ("selfRating" in shot || "outcome" in shot) return shot;
+
+        // v1.0形式（result がある）なら変換
+        if ("result" in shot && shot.result) {
+          migrated = true;
+          const map = LEGACY_RESULT_MAP[shot.result] || {
+            selfRating: null,
+            outcome: "in_play",
+          };
+          // 旧形式は残しつつ新形式を追加（後方互換）
+          return {
+            ...shot,
+            selfRating: map.selfRating,
+            outcome: map.outcome,
+          };
+        }
+        // result すらないなら新形式の空値で補完
+        return { ...shot, selfRating: null, outcome: "in_play" };
+      });
+
+      // ホールに manualScore がなければ shots.length で補完（旧データ救済）
+      let manualScore = hole.manualScore;
+      if (manualScore === undefined && newShots.length > 0) {
+        manualScore = newShots.length;
+        migrated = true;
+      }
+
+      return {
+        ...hole,
+        shots: newShots,
+        ...(manualScore !== undefined ? { manualScore } : {}),
+      };
+    });
+
+    return { ...round, holes: newHoles };
+  });
+
+  if (!migrated) return state;
+  return { ...state, rounds: newRounds, _v: 2 };
+}
+
 const initialState = () => {
   const loaded = loadState();
   if (loaded) {
@@ -158,13 +229,14 @@ const initialState = () => {
       });
     }
     if (!loaded.courseMasters) loaded.courseMasters = [];
-    return loaded;
+    return migrateState(loaded);
   }
   return {
     clubs: DEFAULT_CLUBS,
     rounds: [],
     courseMasters: [],
     unit: "yd",
+    _v: 2,
   };
 };
 
@@ -193,6 +265,51 @@ function trimmedMean(arr, trim = 0.1) {
   const k = Math.floor(s.length * trim);
   const t = s.slice(k, s.length - k);
   return t.reduce((a, b) => a + b, 0) / t.length;
+}
+
+// ===== ショット v2.0 ヘルパー =====
+// 旧 result からも v2.0 形式にアクセスできるように正規化
+function getShotOutcome(shot) {
+  if (shot.outcome) return shot.outcome;
+  if (shot.result === "ob") return "ob";
+  return "in_play";
+}
+function getShotSelfRating(shot) {
+  if ("selfRating" in shot) return shot.selfRating;
+  if (shot.result && shot.result !== "ob") return shot.result;
+  return null;
+}
+// プレー外（OB・ロスト・ペナ）：距離分析から除外すべきショット
+function isShotOffPlay(shot) {
+  const o = getShotOutcome(shot);
+  return o !== "in_play";
+}
+// 打ち直しフラグ（v2.0で追加、距離分析から除外）
+function isReplay(shot) {
+  return !!shot.isReplay;
+}
+// 「ミス」とみなすショット（自己評価が miss/bad、または off-play）
+function isMissShot(shot) {
+  const r = getShotSelfRating(shot);
+  if (r === "miss" || r === "bad") return true;
+  if (isShotOffPlay(shot)) return true;
+  return false;
+}
+// ホールのスコア（手入力 manualScore 優先、なければ shots.length）
+function getHoleScore(hole) {
+  if (typeof hole.manualScore === "number" && hole.manualScore > 0) {
+    return hole.manualScore;
+  }
+  return hole.shots ? hole.shots.length : 0;
+}
+// ホールのパット数（手入力 manualPutts 優先、なければクラブIDで判定）
+function getHolePutts(hole, clubs) {
+  if (typeof hole.manualPutts === "number") return hole.manualPutts;
+  if (!hole.shots || !clubs) return 0;
+  const putterIds = new Set(
+    clubs.filter((c) => c.category === "putter").map((c) => c.id)
+  );
+  return hole.shots.filter((s) => putterIds.has(s.clubId)).length;
 }
 
 // ===== コースマスターヘルパー =====
@@ -309,7 +426,14 @@ const LIE_LABELS = {
   bunker: "バンカー",
   green: "グリーン",
 };
-const RES_LABELS = { good: "◎", ok: "○", miss: "△", bad: "×", ob: "OB" };
+const SELF_RATING_LABELS = { good: "◎", ok: "○", miss: "△", bad: "×" };
+const OUTCOME_LABELS = {
+  in_play: "セーフ",
+  ob: "OB",
+  lost: "ロスト",
+  penalty_red: "赤杭",
+  penalty_yellow: "黄杭",
+};
 const DIR_LABELS = { left: "左", straight: "直", right: "右" };
 const DEPTH_LABELS = { short: "ショート", pin: "ピン", over: "オーバー" };
 
@@ -344,21 +468,40 @@ function buildRoundReviewPrompt(round, clubs, unit) {
   lines.push(`- 日付：${fmtDate(round.date)}`);
   lines.push(`- コース：${round.course || "—"}`);
   lines.push(`- ティー：${round.tee || "—"} / 天候：${round.weather || "—"}`);
+  if (kpi.totalScore > 0) {
+    lines.push(
+      `- スコア：${kpi.totalScore}（${kpi.scoredHoles}/18ホール記録）`
+    );
+  }
   lines.push(`- 総ショット数：${kpi.totalShots}`);
   lines.push(`- パット：${kpi.putts}`);
   lines.push(`- パーオン：${kpi.parOn}/${kpi.parOnEligible}`);
   lines.push(`- FWキープ：${kpi.fwKeep}/${kpi.fwEligible}`);
   lines.push(`- OB：${kpi.obs}`);
   lines.push("");
+  lines.push("## ホール毎スコア");
+  lines.push("");
+  lines.push("| ホール | Par | スコア | パット |");
+  lines.push("|---|---|---|---|");
+  round.holes.forEach((h) => {
+    const score = getHoleScore(h);
+    const putts = getHolePutts(h, clubs);
+    if (score > 0) {
+      lines.push(`| ${h.number} | ${h.par} | ${score} | ${putts || "-"} |`);
+    }
+  });
+  lines.push("");
   lines.push("## 全ショット一覧");
   lines.push("");
   lines.push(
-    "| ホール | Par | # | クラブ | 距離 | 打点 | 着地 | 方向 | 距離感 | 結果 | メモ |"
+    "| ホール | Par | # | クラブ | 距離 | 打点 | 着地 | 方向 | 距離感 | 自己評価 | 結果 | 打ち直し | メモ |"
   );
-  lines.push("|---|---|---|---|---|---|---|---|---|---|---|");
+  lines.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|");
   round.holes.forEach((h) => {
     h.shots.forEach((s, i) => {
       const club = clubMap[s.clubId]?.name || "—";
+      const sr = getShotSelfRating(s);
+      const oc = getShotOutcome(s);
       const row = [
         h.number,
         h.par,
@@ -369,7 +512,9 @@ function buildRoundReviewPrompt(round, clubs, unit) {
         LIE_LABELS[s.nextLie] || "—",
         DIR_LABELS[s.direction] || "—",
         DEPTH_LABELS[s.depth] || "—",
-        RES_LABELS[s.result] || "—",
+        sr ? SELF_RATING_LABELS[sr] : "—",
+        OUTCOME_LABELS[oc] || "—",
+        isReplay(s) ? "✓" : "—",
         (s.memo || "").replace(/\|/g, "／").replace(/\n/g, " "),
       ]
         .map((v) => ` ${v} `)
@@ -384,12 +529,12 @@ function buildRoundReviewPrompt(round, clubs, unit) {
     const c = clubMap[cid];
     if (!c) return;
     const dists = shots
-      .filter((s) => s.distance != null && s.result !== "ob")
+      .filter((s) => s.distance != null && !isShotOffPlay(s) && !isReplay(s))
       .map((s) => s.distance);
     const dirs = shots.filter((s) => s.direction);
     const depths = shots.filter((s) => s.depth);
     const miss = shots.filter((s) =>
-      ["miss", "bad", "ob"].includes(s.result)
+      isMissShot(s)
     ).length;
     const parts = [`${shots.length}回`];
     if (dists.length)
@@ -562,7 +707,7 @@ function computeClubStats(state) {
       h.shots.forEach((s) => {
         if (!byClub[s.clubId]) return;
         byClub[s.clubId].shots.push(s);
-        if (s.distance != null && s.result !== "ob") {
+        if (s.distance != null && !isShotOffPlay(s) && !isReplay(s)) {
           byClub[s.clubId].all.push(s.distance);
           if (s.lie === "fw" || s.lie === "tee")
             byClub[s.clubId].fw.push(s.distance);
@@ -575,7 +720,7 @@ function computeClubStats(state) {
     const data = byClub[c.id];
     const all = data.all;
     const missCount = data.shots.filter((s) =>
-      ["miss", "bad", "ob"].includes(s.result)
+      isMissShot(s)
     ).length;
     const dirShots = data.shots.filter((s) => s.direction);
     const dir = {
@@ -622,39 +767,57 @@ function computeRoundKPI(round, clubs) {
     clubs.filter((c) => c.category === "putter").map((c) => c.id)
   );
   let putts = 0,
-    totalShots = 0,
+    totalScore = 0, // ← v2.0: スコアは手入力 manualScore ベース
+    totalShots = 0, // ショット記録の本数（参考）
     obs = 0;
   let parOn = 0,
     parOnEligible = 0;
   let fwKeep = 0,
     fwEligible = 0;
-  let recordedHoles = 0;
+  let recordedHoles = 0; // ショットを1つ以上記録しているホール
+  let scoredHoles = 0; // スコアが入力されているホール
 
   round.holes.forEach((h) => {
-    if (h.shots.length === 0) return;
-    recordedHoles++;
-    totalShots += h.shots.length;
-    h.shots.forEach((s) => {
-      if (putterIds.has(s.clubId)) putts++;
-      if (s.result === "ob") obs++;
-    });
-    const targetIdx = h.par - 2 - 1;
-    if (targetIdx >= 0 && h.shots.length > targetIdx) {
-      parOnEligible++;
-      const shotAt = h.shots[targetIdx];
-      if (shotAt && shotAt.nextLie === "green") parOn++;
+    const hasShots = (h.shots || []).length > 0;
+    const score = getHoleScore(h);
+    const hasScore = score > 0;
+
+    if (hasShots) recordedHoles++;
+    if (hasScore) scoredHoles++;
+
+    if (hasShots) {
+      totalShots += h.shots.length;
+      h.shots.forEach((s) => {
+        if (putterIds.has(s.clubId)) putts += 0; // shotsベースのパットは下で別途
+        if (getShotOutcome(s) === "ob") obs++;
+      });
     }
-    if (h.par >= 4 && h.shots.length >= 1) {
-      fwEligible++;
-      const tee = h.shots[0];
-      if (tee && tee.nextLie === "fw") fwKeep++;
+    if (hasScore) {
+      totalScore += score;
+      // パット数は手入力優先。なければクラブIDで判定
+      putts += getHolePutts(h, clubs);
+    }
+
+    if (hasShots) {
+      const targetIdx = h.par - 2 - 1;
+      if (targetIdx >= 0 && h.shots.length > targetIdx) {
+        parOnEligible++;
+        const shotAt = h.shots[targetIdx];
+        if (shotAt && shotAt.nextLie === "green") parOn++;
+      }
+      if (h.par >= 4 && h.shots.length >= 1) {
+        fwEligible++;
+        const tee = h.shots[0];
+        if (tee && tee.nextLie === "fw") fwKeep++;
+      }
     }
   });
   return {
     id: round.id,
     date: round.date,
     course: round.course,
-    totalShots,
+    totalScore, // v2.0 でスコアの基準
+    totalShots, // ショット記録の本数
     putts,
     obs,
     parOn,
@@ -662,6 +825,7 @@ function computeRoundKPI(round, clubs) {
     fwKeep,
     fwEligible,
     recordedHoles,
+    scoredHoles,
   };
 }
 
@@ -674,19 +838,28 @@ function aggregateKPI(rounds) {
       fwKeepRate: null,
       obRate: null,
     };
-  const sumScore = rounds.reduce((a, r) => a + r.totalShots, 0);
+  // v2.0: スコアは totalScore (manualScore合計) を使用
+  const sumScore = rounds.reduce((a, r) => a + (r.totalScore || 0), 0);
   const sumPutts = rounds.reduce((a, r) => a + r.putts, 0);
   const sumParOn = rounds.reduce((a, r) => a + r.parOn, 0);
   const sumParOnEli = rounds.reduce((a, r) => a + r.parOnEligible, 0);
   const sumFwKeep = rounds.reduce((a, r) => a + r.fwKeep, 0);
   const sumFwEli = rounds.reduce((a, r) => a + r.fwEligible, 0);
   const sumObs = rounds.reduce((a, r) => a + r.obs, 0);
+  // OB率はショット記録ベース（記録があるラウンドのみ）
+  const totalShotsForOb = rounds.reduce((a, r) => a + (r.totalShots || 0), 0);
   return {
-    avgScore: Math.round((sumScore / rounds.length) * 10) / 10,
-    avgPutts: Math.round((sumPutts / rounds.length) * 10) / 10,
+    avgScore: sumScore
+      ? Math.round((sumScore / rounds.length) * 10) / 10
+      : null,
+    avgPutts: sumPutts
+      ? Math.round((sumPutts / rounds.length) * 10) / 10
+      : null,
     parOnRate: sumParOnEli ? Math.round((sumParOn / sumParOnEli) * 100) : null,
     fwKeepRate: sumFwEli ? Math.round((sumFwKeep / sumFwEli) * 100) : null,
-    obRate: sumScore ? Math.round((sumObs / sumScore) * 1000) / 10 : null,
+    obRate: totalShotsForOb
+      ? Math.round((sumObs / totalShotsForOb) * 1000) / 10
+      : null,
   };
 }
 
@@ -1166,13 +1339,19 @@ function SwipeableRoundCard({
             <div className="round-card-meta">
               {round.tee && <span>{round.tee}</span>}
               {round.weather && <span>{round.weather}</span>}
-              <span>{kpi.recordedHoles}/18 holes</span>
+              <span>
+                {kpi.scoredHoles > 0
+                  ? `${kpi.scoredHoles}/18 holes`
+                  : `${kpi.recordedHoles}/18 holes`}
+              </span>
             </div>
-            {kpi.totalShots > 0 && (
+            {(kpi.totalScore > 0 || kpi.totalShots > 0) && (
               <div className="round-card-kpis">
-                <span className="rkpi-mini">
-                  <b>{kpi.putts}</b> パット
-                </span>
+                {kpi.putts > 0 && (
+                  <span className="rkpi-mini">
+                    <b>{kpi.putts}</b> パット
+                  </span>
+                )}
                 {kpi.parOnEligible > 0 && (
                   <span className="rkpi-mini">
                     <b>
@@ -1193,8 +1372,17 @@ function SwipeableRoundCard({
             )}
           </div>
           <div className="round-card-score">
-            <div className="score-num">{kpi.totalShots}</div>
-            <div className="score-label">shots</div>
+            {kpi.totalScore > 0 ? (
+              <>
+                <div className="score-num">{kpi.totalScore}</div>
+                <div className="score-label">score</div>
+              </>
+            ) : (
+              <>
+                <div className="score-num">{kpi.totalShots}</div>
+                <div className="score-label">shots</div>
+              </>
+            )}
           </div>
         </button>
       </div>
@@ -1734,6 +1922,9 @@ function RoundView({
         <Plus size={24} strokeWidth={2.6} />
       </button>
 
+      {/* v2.0: ホールのスコア手入力（コンパクト・下部固定） */}
+      <HoleScoreInput hole={hole} onChange={(patch) => updateHole(patch)} />
+
       <div className="hole-nav">
         <button
           className="hole-nav-btn"
@@ -1924,6 +2115,119 @@ function DeleteConfirmModal({
   );
 }
 
+function HoleScoreInput({ hole, onChange }) {
+  const score = hole.manualScore;
+  const putts = hole.manualPutts;
+  const par = hole.par || 4;
+
+  const setScore = (v) => {
+    if (v === null || v === undefined || v === "") {
+      onChange({ manualScore: undefined });
+    } else {
+      const num = Math.max(1, Math.min(20, Number(v)));
+      onChange({ manualScore: num });
+    }
+  };
+  const setPutts = (v) => {
+    if (v === null || v === undefined || v === "") {
+      onChange({ manualPutts: undefined });
+    } else {
+      const num = Math.max(0, Math.min(10, Number(v)));
+      onChange({ manualPutts: num });
+    }
+  };
+
+  // ショット数とスコアの食い違い警告（任意・無視可能）
+  const shotCount = (hole.shots || []).length;
+  const showMismatch = score && shotCount > 0 && Math.abs(score - shotCount) > 0;
+
+  // 対パー
+  const diff = score ? score - par : null;
+  const diffLabel =
+    diff === null
+      ? null
+      : diff === 0
+      ? "Par"
+      : diff > 0
+      ? `+${diff}`
+      : `${diff}`;
+  const diffTone =
+    diff === null
+      ? ""
+      : diff <= -2
+      ? "great"
+      : diff === -1
+      ? "good"
+      : diff === 0
+      ? "ok"
+      : diff === 1
+      ? "bogey"
+      : "double";
+
+  return (
+    <div className="score-input-bar">
+      <div className="score-input-bar-row">
+        <span className="score-input-bar-label">スコア</span>
+        <button
+          className="score-step-btn small"
+          onClick={() => setScore((score || par) - 1)}
+          disabled={!score || score <= 1}
+        >
+          −
+        </button>
+        <input
+          type="number"
+          inputMode="numeric"
+          className="score-input-num small"
+          value={score ?? ""}
+          placeholder={String(par)}
+          onChange={(e) => setScore(e.target.value)}
+        />
+        <button
+          className="score-step-btn small"
+          onClick={() => setScore((score || par) + 1)}
+        >
+          +
+        </button>
+        {diffLabel && (
+          <span className={`score-diff tone-${diffTone}`}>{diffLabel}</span>
+        )}
+
+        <span className="score-input-bar-divider" />
+
+        <span className="score-input-bar-label">パット</span>
+        <button
+          className="score-step-btn small"
+          onClick={() => setPutts(Math.max(0, (putts ?? 0) - 1))}
+          disabled={putts == null || putts <= 0}
+        >
+          −
+        </button>
+        <input
+          type="number"
+          inputMode="numeric"
+          className="score-input-num small"
+          value={putts ?? ""}
+          placeholder="-"
+          onChange={(e) => setPutts(e.target.value)}
+        />
+        <button
+          className="score-step-btn small"
+          onClick={() => setPutts((putts ?? 0) + 1)}
+        >
+          +
+        </button>
+      </div>
+
+      {showMismatch && (
+        <div className="score-mismatch-note">
+          ⚠️ 記録{shotCount}打 ⇄ スコア{score}打。ペナや打ち直しを含めて入力してください
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ParPicker({ value, onChange }) {
   return (
     <div className="par-picker">
@@ -1962,7 +2266,10 @@ function DistanceField({ value, unit, placeholder, onChange }) {
 
 function ShotRow({ index, shot, clubs, unit, onClick }) {
   const club = clubs.find((c) => c.id === shot.clubId);
-  const result = RESULTS.find((r) => r.id === shot.result);
+  const sr = getShotSelfRating(shot);
+  const oc = getShotOutcome(shot);
+  const rating = SELF_RATINGS.find((r) => r.id === sr);
+  const outcome = OUTCOMES.find((o) => o.id === oc);
   const lie = LIES.find((l) => l.id === shot.lie);
   const dirLabel =
     shot.direction === "left"
@@ -1982,7 +2289,10 @@ function ShotRow({ index, shot, clubs, unit, onClick }) {
       : null;
   return (
     <button className="shot-row" onClick={onClick}>
-      <div className="shot-num">{index}</div>
+      <div className="shot-num">
+        {index}
+        {isReplay(shot) && <span className="shot-replay-badge">↻</span>}
+      </div>
       <div className="shot-club">{club?.name || "—"}</div>
       <div className="shot-distance">
         {shot.distance != null ? (
@@ -1999,7 +2309,18 @@ function ShotRow({ index, shot, clubs, unit, onClick }) {
         {depthLabel && <span className="tag tag-depth">{depthLabel}</span>}
       </div>
       <div className="shot-lie">{lie?.label}</div>
-      <div className={`shot-result tone-${result?.tone}`}>{result?.label}</div>
+      <div className="shot-result-cell">
+        {rating && (
+          <span className={`shot-result tone-${rating.tone}`}>
+            {rating.label}
+          </span>
+        )}
+        {outcome && oc !== "in_play" && (
+          <span className={`shot-outcome tone-${outcome.tone}`}>
+            {outcome.label}
+          </span>
+        )}
+      </div>
     </button>
   );
 }
@@ -2026,7 +2347,14 @@ function ShotEditor({
   const [nextLie, setNextLie] = useState(existing?.nextLie || "fw");
   const [direction, setDirection] = useState(existing?.direction || null);
   const [depth, setDepth] = useState(existing?.depth || null);
-  const [result, setResult] = useState(existing?.result || null);
+  // v2.0: 結果を自己評価と結果に分離
+  const [selfRating, setSelfRating] = useState(
+    existing ? getShotSelfRating(existing) : null
+  );
+  const [outcome, setOutcome] = useState(
+    existing ? getShotOutcome(existing) : "in_play"
+  );
+  const [isReplayShot, setIsReplayShot] = useState(!!existing?.isReplay);
   const [memo, setMemo] = useState(existing?.memo || "");
 
   // クラブ選択時は常に平均飛距離で上書き
@@ -2062,7 +2390,7 @@ function ShotEditor({
       .filter((g) => g.items.length);
   }, [clubs]);
 
-  const canSave = clubId && result && lie;
+  const canSave = clubId && outcome && lie;
 
   return (
     <div className="sheet-backdrop" onClick={onCancel}>
@@ -2212,20 +2540,53 @@ function ShotEditor({
         </div>
 
         <div className="editor-section">
-          <div className="editor-label">結果</div>
+          <div className="editor-label">自己評価（任意）</div>
           <div className="result-row">
-            {RESULTS.map((r) => (
+            {SELF_RATINGS.map((r) => (
               <button
                 key={r.id}
                 className={`result-btn tone-${r.tone} ${
-                  result === r.id ? "on" : ""
+                  selfRating === r.id ? "on" : ""
                 }`}
-                onClick={() => setResult(r.id)}
+                onClick={() =>
+                  setSelfRating(selfRating === r.id ? null : r.id)
+                }
+                title={r.desc}
               >
                 {r.label}
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="editor-section">
+          <div className="editor-label">結果</div>
+          <div className="outcome-row">
+            {OUTCOMES.map((o) => (
+              <button
+                key={o.id}
+                className={`outcome-btn tone-${o.tone} ${
+                  outcome === o.id ? "on" : ""
+                }`}
+                onClick={() => setOutcome(o.id)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="editor-section">
+          <label className="replay-toggle">
+            <input
+              type="checkbox"
+              checked={isReplayShot}
+              onChange={(e) => setIsReplayShot(e.target.checked)}
+            />
+            <span className="replay-toggle-text">
+              <b>打ち直し</b>（OB等の後の再ショット・距離分析から除外）
+            </span>
+          </label>
         </div>
 
         <div className="editor-section">
@@ -2260,7 +2621,9 @@ function ShotEditor({
                   nextLie,
                   direction,
                   depth,
-                  result,
+                  selfRating,
+                  outcome,
+                  isReplay: isReplayShot,
                   memo,
                 })
               }
@@ -2723,7 +3086,9 @@ function RoundsTab({ state }) {
               <div className="round-kpi-grid">
                 <div className="rkpi">
                   <div className="rkpi-label">スコア</div>
-                  <div className="rkpi-num">{r.totalShots}</div>
+                  <div className="rkpi-num">
+                    {r.totalScore > 0 ? r.totalScore : r.totalShots || "-"}
+                  </div>
                 </div>
                 <div className="rkpi">
                   <div className="rkpi-label">パット</div>
@@ -3605,18 +3970,23 @@ function Tutorial({ onClose }) {
       ),
     },
     {
-      title: "ショット記録",
-      subtitle: "1球ずつ詳しく残す",
+      title: "ショット記録とスコア",
+      subtitle: "ショットの記録とホール毎のスコア入力",
       preview: <TutorialPreviewShot />,
       desc: (
         <>
           <p>
             ラウンド画面で右下の<b>＋ボタン</b>からショット入力。
+            <b>自己評価（◎○△×）</b>と<b>結果（セーフ/OB/ロスト等）</b>
+            を分けて記録できるので、「ナイスショットなのにOB」も残せます。
           </p>
-          <p>クラブを選ぶと平均距離が自動入力、±ボタンで微調整。</p>
           <p>
-            方向（左/直/右）と距離感（短/ピン/長）を残すと、後から
-            <b>ミス傾向</b>として可視化されます。
+            OB後の打ち直しは<b>「打ち直し」チェック</b>を入れると、
+            距離分析から自動的に除外されます。
+          </p>
+          <p>
+            ホール下部の<b>スコア入力</b>でそのホールの打数を手入力。
+            ペナや打ち直しを含めた正確なスコアを残せます。
           </p>
         </>
       ),
@@ -4529,17 +4899,169 @@ function Style() {
       .shot-result.tone-miss { background: rgba(255,184,77,0.2); color: var(--tone-miss); }
       .shot-result.tone-bad { background: rgba(255,107,107,0.2); color: var(--tone-bad); }
 
-      /* FAB & HOLE NAV */
+      /* v2.0: ShotRow の結果セル（評価＋結果並列表示） */
+      .shot-result-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        align-items: flex-end;
+        min-width: 36px;
+      }
+      .shot-outcome {
+        font-size: 9px;
+        font-weight: 700;
+        padding: 2px 5px;
+        border-radius: 4px;
+        white-space: nowrap;
+      }
+      .shot-outcome.tone-bad {
+        background: var(--red);
+        color: #fff;
+      }
+      .shot-outcome.tone-ok {
+        background: rgba(94,184,255,0.18);
+        color: var(--tone-ok);
+      }
+      .shot-replay-badge {
+        display: inline-block;
+        margin-left: 3px;
+        font-size: 10px;
+        color: var(--amber);
+      }
+
+      /* v2.0: ホールスコア手入力バー（hole-navの直上） */
+      .score-input-bar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        /* hole-nav の高さ分 上にずらす（hole-nav は約64px + safe-area） */
+        bottom: calc(64px + env(safe-area-inset-bottom));
+        max-width: 480px;
+        margin: 0 auto;
+        background: rgba(20,20,20,0.96);
+        -webkit-backdrop-filter: blur(12px);
+        backdrop-filter: blur(12px);
+        border-top: 1px solid var(--border-soft);
+        padding: 8px 12px;
+        z-index: 7;
+      }
+      @media (min-width: 600px) {
+        .score-input-bar { max-width: 430px; }
+      }
+      .score-input-bar-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: nowrap;
+        justify-content: center;
+      }
+      .score-input-bar-label {
+        font-size: 11px;
+        color: var(--text-faint);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .score-input-bar-divider {
+        width: 1px;
+        height: 20px;
+        background: var(--border-soft);
+        margin: 0 4px;
+      }
+      .score-diff {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 4px;
+        margin-left: 2px;
+      }
+      .score-diff.tone-great {
+        background: var(--green);
+        color: #0a0a0a;
+      }
+      .score-diff.tone-good {
+        background: rgba(182,242,74,0.2);
+        color: var(--green);
+      }
+      .score-diff.tone-ok {
+        background: var(--bg-2);
+        color: var(--text-dim);
+      }
+      .score-diff.tone-bogey {
+        background: rgba(255,184,77,0.2);
+        color: var(--amber);
+      }
+      .score-diff.tone-double {
+        background: rgba(255,107,107,0.2);
+        color: var(--red);
+      }
+      .score-step-btn {
+        flex: 0 0 auto;
+        background: var(--bg-2);
+        border-radius: 8px;
+        font-weight: 700;
+        color: var(--text);
+      }
+      .score-step-btn:active {
+        transform: scale(0.92);
+      }
+      .score-step-btn:disabled {
+        opacity: 0.3;
+      }
+      .score-step-btn.small {
+        width: 30px;
+        height: 30px;
+        font-size: 16px;
+      }
+      .score-input-num {
+        flex: 0 0 auto;
+        text-align: center;
+        background: var(--bg-2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 700;
+        outline: none;
+      }
+      .score-input-num.small {
+        width: 44px;
+        height: 30px;
+        font-size: 15px;
+        padding: 0;
+      }
+      .score-input-num:focus {
+        border-color: var(--green);
+      }
+      .score-mismatch-note {
+        margin-top: 4px;
+        padding: 4px 8px;
+        background: rgba(255,184,77,0.08);
+        border-radius: 6px;
+        font-size: 10px;
+        color: var(--amber);
+        text-align: center;
+        line-height: 1.4;
+      }
+
+      /* FAB の位置をスコアバー分上にずらす */
       .fab {
         position: fixed;
         right: 18px;
-        bottom: 84px;
+        /* hole-nav (64px) + score-input-bar (約50px) + 18px margin */
+        bottom: calc(132px + env(safe-area-inset-bottom));
         width: 56px; height: 56px;
         background: var(--green); color: #0a0a0a;
         border-radius: 50%;
         display: flex; align-items: center; justify-content: center;
         box-shadow: 0 8px 24px rgba(182,242,74,0.35);
         z-index: 9;
+      }
+      /* ショット一覧の下部にスコアバー＋hole-nav分の余白 */
+      .round-screen .shot-list,
+      .round-screen .empty-shots {
+        padding-bottom: 130px;
       }
       .hole-nav {
         position: fixed;
@@ -4674,7 +5196,7 @@ function Style() {
 
       .result-row {
         display: grid;
-        grid-template-columns: repeat(5, 1fr);
+        grid-template-columns: repeat(4, 1fr);
         gap: 4px;
       }
       .result-btn {
@@ -4688,6 +5210,51 @@ function Style() {
       .result-btn.on.tone-ok { background: var(--tone-ok); color: #0a0a0a; }
       .result-btn.on.tone-miss { background: var(--tone-miss); color: #0a0a0a; }
       .result-btn.on.tone-bad { background: var(--tone-bad); color: #fff; }
+
+      /* v2.0: 結果（事実）ボタン */
+      .outcome-row {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 4px;
+      }
+      .outcome-btn {
+        padding: 12px 4px;
+        background: var(--bg-2); border-radius: 10px;
+        font-size: 12px; font-weight: 700; color: var(--text-dim);
+      }
+      .outcome-btn:active { transform: scale(0.95); }
+      .outcome-btn.on.tone-ok {
+        background: var(--green); color: #0a0a0a;
+      }
+      .outcome-btn.on.tone-bad {
+        background: var(--red); color: #fff;
+      }
+
+      /* v2.0: 打ち直しトグル */
+      .replay-toggle {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        background: var(--bg-2);
+        border: 1px solid var(--border-soft);
+        border-radius: 10px;
+        cursor: pointer;
+      }
+      .replay-toggle input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--green);
+        flex: 0 0 auto;
+      }
+      .replay-toggle-text {
+        font-size: 12px;
+        color: var(--text-dim);
+        line-height: 1.5;
+      }
+      .replay-toggle-text b {
+        color: var(--text);
+      }
 
       .memo-input-large {
         width: 100%;
@@ -5923,10 +6490,10 @@ function Style() {
       /* CodeSandbox banner spacer override - apply only when running inside CSB iframe */
       .app.in-csb .bottom-nav { bottom: 42px; }
       .app.in-csb .hole-nav { bottom: calc(42px + env(safe-area-inset-bottom)); }
-      .app.in-csb .fab { bottom: calc(84px + 42px); }
+      .app.in-csb .score-input-bar { bottom: calc(64px + 42px + env(safe-area-inset-bottom)); }
+      .app.in-csb .fab { bottom: calc(132px + 42px + env(safe-area-inset-bottom)); }
 
-      /* Standalone (本番iPhone Safari、PWA含む) ではバナーオフセット無し */
-      .app.standalone .fab { bottom: calc(84px + env(safe-area-inset-bottom)); }
+      /* Standalone (本番Safari/Chrome、PWA含む) はそのままbottom指定が効く */
     `}</style>
   );
 }
