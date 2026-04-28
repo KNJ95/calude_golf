@@ -324,7 +324,14 @@ function getTeesForVenue(venue, courseMastersOverride) {
   DEFAULT_COURSES.forEach((c) => {
     if (c.venue === venue && c.tee) tees.add(c.tee);
   });
-  return Array.from(tees);
+  // Blue → White → Red → Gold → その他（アルファベット順）の順でソート
+  const order = { Blue: 0, White: 1, Red: 2, Gold: 3 };
+  return Array.from(tees).sort((a, b) => {
+    const av = a in order ? order[a] : 99;
+    const bv = b in order ? order[b] : 99;
+    if (av !== bv) return av - bv;
+    return a.localeCompare(b);
+  });
 }
 
 // venue+teeに紐づくコース名一覧
@@ -1693,7 +1700,7 @@ function NewRoundSheet({ courseMasters, onCancel, onStart }) {
           <div className="field">
             <span className="field-label">ティー（任意・手入力）</span>
             <div className="chip-row">
-              {["White", "Red", "Blue", "Gold", "レギュラー", "バック"].map(
+              {["Blue", "White", "Red", "Gold", "レギュラー", "バック"].map(
                 (t) => (
                   <button
                     key={t}
@@ -3478,7 +3485,7 @@ function CourseEditor({ existing, unit, onCancel, onSave }) {
         <div className="field">
           <span className="field-label">ティー</span>
           <div className="chip-row">
-            {["White", "Red", "Blue", "Gold"].map((t) => (
+            {["Blue", "White", "Red", "Gold"].map((t) => (
               <button
                 key={t}
                 className={`chip tee-chip tee-${t.toLowerCase()} ${
