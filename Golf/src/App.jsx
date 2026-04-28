@@ -5429,7 +5429,10 @@ function Style() {
       /* TUTORIAL */
       .tutorial-backdrop {
         position: fixed;
-        top: 0; left: 0; right: 0; bottom: 0;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
         background: rgba(0,0,0,0.85);
         -webkit-backdrop-filter: blur(8px);
         backdrop-filter: blur(8px);
@@ -5437,13 +5440,11 @@ function Style() {
         display: flex;
         flex-direction: column;
         animation: fadeIn 0.3s ease-out;
-        /* iOS Safari: 高さを動的ビューポートに固定 */
-        height: 100vh;
-        height: 100dvh;
+        /* top/bottomで自動高さ決定。height指定はzoomと相性悪いので使わない */
         overflow: hidden;
       }
       .tutorial-card {
-        width: 100%;
+        width: calc(100% - 24px);
         max-width: 420px;
         margin: 12px auto;
         flex: 1 1 auto;
