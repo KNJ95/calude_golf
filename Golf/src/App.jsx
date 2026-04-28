@@ -4531,7 +4531,7 @@ function Style() {
         border-top: 1px solid var(--border-soft);
         display: flex; justify-content: space-around;
         padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
-        z-index: 200; /* 最前面（モーダル backdrop 20 / tutorial 100 より上） */
+        z-index: 15; /* 通常UI（topbar:5 等）より上、モーダル(20)・チュートリアル(100)より下 */
       }
       @media (min-width: 600px) {
         .bottom-nav { max-width: 430px; }
