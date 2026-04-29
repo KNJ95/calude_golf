@@ -14,7 +14,6 @@ import {
   getCoursesForVenueAndTee,
 } from "../data/courseHelpers";
 import { computeRoundKPI } from "../data/kpi";
-import DeleteConfirmModal from "./DeleteConfirmModal";
 
 // ============================================================
 //  HOME
