@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import COURSES_DATA from "./courses.json";
 
+// ============================================================
+//  ICONS
+// ============================================================
 // --- Inline SVG icons ---
 const Icon = ({ children, size = 20, strokeWidth = 2 }) => (
   <svg
@@ -16,6 +19,7 @@ const Icon = ({ children, size = 20, strokeWidth = 2 }) => (
     {children}
   </svg>
 );
+
 const ChevronLeft = (p) => (
   <Icon {...p}>
     <polyline points="15 18 9 12 15 6" />
@@ -112,6 +116,7 @@ const LIES = [
   { id: "rough", label: "ラフ" },
   { id: "bunker", label: "バンカー" },
   { id: "green", label: "グリーン" },
+  { id: "pond", label: "池" },
 ];
 
 // 自己評価（感覚値）
@@ -425,13 +430,605 @@ async function copyToClipboard(text) {
   }
 }
 
-// ===== AI連携プロンプト =====
+// ============================================================
+//  ROOT APP
+// ============================================================
+export default function App() {
+  const [state, setState] = useState(initialState);
+  const [view, setView] = useState({ name: "home" });
+
+  // チュートリアル表示判定（localStorage に完了フラグがなければ表示）
+  const [showTutorial, setShowTutorial] = useState(() => {
+    try {
+      return !localStorage.getItem("golf-shot-tracker:tutorial-done");
+    } catch {
+      return true;
+    }
+  });
+
+  const closeTutorial = () => {
+    try {
+      localStorage.setItem("golf-shot-tracker:tutorial-done", "1");
+    } catch {}
+    setShowTutorial(false);
+  };
+
+  useEffect(() => saveState(state), [state]);
+
+  // viewport meta tag を動的に設定（iPhone Safariで画面サイズにフィット）
+  useEffect(() => {
+    let meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.name = "viewport";
+      document.head.appendChild(meta);
+    }
+    meta.content =
+      "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover";
+
+    // PWA用 meta も追加（iPhone ホーム画面追加時のステータスバー対応）
+    const ensureMeta = (name, content) => {
+      let m = document.querySelector(`meta[name="${name}"]`);
+      if (!m) {
+        m = document.createElement("meta");
+        m.name = name;
+        document.head.appendChild(m);
+      }
+      m.content = content;
+    };
+    ensureMeta("apple-mobile-web-app-capable", "yes");
+    ensureMeta("apple-mobile-web-app-status-bar-style", "black-translucent");
+    ensureMeta("theme-color", "#0a0a0a");
+
+    // body の背景色を黒に
+    document.body.style.background = "#000";
+    document.documentElement.style.background = "#000";
+  }, []);
+
+  // CodeSandbox の iframe 上で動いているかを判定（バナーが表示されるか）
+  const isCodeSandbox = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      // iframe内 + CSBドメイン
+      const inIframe = window.self !== window.top;
+      const csbHost = /(\.csb\.app|codesandbox\.io)/.test(
+        window.location.hostname
+      );
+      return inIframe && csbHost;
+    } catch {
+      return true; // クロスオリジンエラー時はiframe内とみなす
+    }
+  }, []);
+
+  const activeRound =
+    view.name === "round"
+      ? state.rounds.find((r) => r.id === view.roundId)
+      : null;
+
+  return (
+    <div className={`app ${isCodeSandbox ? "in-csb" : "standalone"}`}>
+      <Style />
+      <div className="phone-frame">
+        {view.name === "home" && (
+          <HomeView
+            state={state}
+            setState={setState}
+            onOpenRound={(id) => setView({ name: "round", roundId: id })}
+            onOpenTutorial={() => setShowTutorial(true)}
+          />
+        )}
+        {view.name === "round" && activeRound && (
+          <RoundView
+            round={activeRound}
+            clubs={state.clubs}
+            unit={state.unit}
+            courseMasters={state.courseMasters || []}
+            onBack={() => setView({ name: "home" })}
+            onUpdate={(updater) => {
+              setState((s) => ({
+                ...s,
+                rounds: s.rounds.map((r) =>
+                  r.id === activeRound.id ? updater(r) : r
+                ),
+              }));
+            }}
+            onUpdateCourseMaster={(venue, courseName, tee, holes) => {
+              setState((s) => ({
+                ...s,
+                courseMasters: upsertCourseMaster(
+                  s.courseMasters || [],
+                  venue,
+                  courseName,
+                  tee,
+                  holes
+                ),
+              }));
+            }}
+            onDelete={() => {
+              setState((s) => ({
+                ...s,
+                rounds: s.rounds.filter((r) => r.id !== activeRound.id),
+              }));
+              setView({ name: "home" });
+            }}
+          />
+        )}
+        {view.name === "analytics" && (
+          <AnalyticsView
+            state={state}
+            onBack={() => setView({ name: "home" })}
+          />
+        )}
+        {view.name === "courses" && (
+          <CoursesView
+            state={state}
+            setState={setState}
+            onBack={() => setView({ name: "home" })}
+          />
+        )}
+        {view.name === "clubs" && (
+          <ClubsView
+            state={state}
+            setState={setState}
+            onBack={() => setView({ name: "home" })}
+          />
+        )}
+      </div>
+      {/* 下部ナビは home / analytics / clubs / courses で表示、round では非表示 */}
+      {view.name !== "round" && (
+        <BottomNav
+          active={view.name}
+          onNavigate={(name) => setView({ name })}
+        />
+      )}
+      {showTutorial && <Tutorial onClose={closeTutorial} />}
+    </div>
+  );
+}
+
+// ============================================================
+//  COURSES MASTER
+// ============================================================
+function CoursesView({ state, setState, onBack }) {
+  const [showEditor, setShowEditor] = useState(null); // null | 'new' | { venue, course, tee } (edit)
+
+  // userMastersをメモ化（state.courseMastersが未定義のときに新配列を毎回作らないように）
+  const userMasters = useMemo(
+    () => state.courseMasters || [],
+    [state.courseMasters]
+  );
+
+  // 統合一覧：DEFAULT_COURSES + userMasters（venue+course+tee重複時はuserMasters優先）
+  const merged = useMemo(() => {
+    const map = new Map();
+    const keyOf = (c) => `${c.venue}::${c.course}::${c.tee || ""}`;
+    DEFAULT_COURSES.forEach((c) => {
+      map.set(keyOf(c), { ...c, source: "default" });
+    });
+    userMasters.forEach((c) => {
+      const k = keyOf(c);
+      const exists = map.has(k);
+      map.set(k, { ...c, source: exists ? "override" : "user" });
+    });
+    return Array.from(map.values());
+  }, [userMasters]);
+
+  // venue別にグループ化
+  const groupedByVenue = useMemo(() => {
+    const groups = new Map();
+    merged.forEach((c) => {
+      if (!groups.has(c.venue)) groups.set(c.venue, []);
+      groups.get(c.venue).push(c);
+    });
+    return Array.from(groups.entries()).map(([venue, courses]) => ({
+      venue,
+      courses,
+    }));
+  }, [merged]);
+
+  const handleSave = ({ venue, course, tee, holes }) => {
+    setState((s) => ({
+      ...s,
+      courseMasters: upsertCourseMaster(
+        s.courseMasters || [],
+        venue,
+        course,
+        tee,
+        holes
+      ),
+    }));
+    setShowEditor(null);
+  };
+
+  const handleDelete = (venue, course, tee) => {
+    const teeLabel = tee ? ` (${tee})` : "";
+    if (
+      !window.confirm(
+        `「${venue} / ${course}${teeLabel}」を削除しますか？\n（コード埋め込みデータがあればそちらに戻ります）`
+      )
+    )
+      return;
+    setState((s) => ({
+      ...s,
+      courseMasters: (s.courseMasters || []).filter(
+        (c) =>
+          !(
+            c.venue === venue &&
+            c.course === course &&
+            (c.tee || null) === (tee || null)
+          )
+      ),
+    }));
+  };
+
+  return (
+    <div className="screen">
+      <header className="topbar">
+        <button className="icon-btn" onClick={onBack}>
+          <ChevronLeft size={22} />
+        </button>
+        <div className="topbar-title">
+          <div className="topbar-course">コースマスター</div>
+          <div className="topbar-meta">
+            {merged.length} コース · {groupedByVenue.length} ゴルフ場
+          </div>
+        </div>
+        <button className="icon-btn" onClick={() => setShowEditor("new")}>
+          <Plus size={20} />
+        </button>
+      </header>
+
+      <div className="cm-help">
+        💡 Geminiにスコアカード画像を投げてJSONをもらい、貼り付けて登録します。
+        <br />
+        ラウンド中にPar・距離を編集すると、対応するコースマスターも自動で上書きされます。
+      </div>
+
+      {merged.length === 0 ? (
+        <div className="empty">
+          <div className="empty-icon">⛳</div>
+          <div className="empty-title">コース未登録</div>
+          <div className="empty-sub">右上の＋からコースを追加できます</div>
+        </div>
+      ) : (
+        <div className="cm-list">
+          {groupedByVenue.map((g) => (
+            <div key={g.venue} className="cm-venue-group">
+              <div className="cm-venue-name">{g.venue}</div>
+              <div className="cm-courses">
+                {g.courses.map((c) => {
+                  const totalPar = c.holes.reduce(
+                    (a, h) => a + (h.par || 0),
+                    0
+                  );
+                  const totalDist = c.holes.reduce(
+                    (a, h) => a + (h.distance || 0),
+                    0
+                  );
+                  const cardKey = `${c.venue}::${c.course}::${c.tee || ""}`;
+                  return (
+                    <div key={cardKey} className="cm-course-card">
+                      <button
+                        className="cm-course-main"
+                        onClick={() =>
+                          setShowEditor({
+                            venue: c.venue,
+                            course: c.course,
+                            tee: c.tee || null,
+                          })
+                        }
+                      >
+                        <div className="cm-course-head">
+                          <div className="cm-course-name">
+                            {c.course}
+                            {c.tee && (
+                              <span
+                                className={`cm-tee-badge tee-${c.tee.toLowerCase()}`}
+                              >
+                                {c.tee}
+                              </span>
+                            )}
+                          </div>
+                          <div className={`cm-source cm-source-${c.source}`}>
+                            {c.source === "default"
+                              ? "標準"
+                              : c.source === "override"
+                              ? "上書"
+                              : "追加"}
+                          </div>
+                        </div>
+                        <div className="cm-course-meta">
+                          <span>{c.holes.length}H</span>
+                          <span>Par {totalPar}</span>
+                          <span>
+                            {totalDist} {state.unit}
+                          </span>
+                        </div>
+                        <div className="cm-course-pars">
+                          {c.holes.map((h, i) => (
+                            <span key={i} className="cm-par-cell">
+                              {h.par}
+                            </span>
+                          ))}
+                        </div>
+                      </button>
+                      {(c.source === "override" || c.source === "user") && (
+                        <button
+                          className="cm-delete"
+                          onClick={() =>
+                            handleDelete(c.venue, c.course, c.tee || null)
+                          }
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showEditor && (
+        <CourseEditor
+          existing={
+            showEditor === "new"
+              ? null
+              : merged.find(
+                  (c) =>
+                    c.venue === showEditor.venue &&
+                    c.course === showEditor.course &&
+                    (c.tee || null) === (showEditor.tee || null)
+                )
+          }
+          unit={state.unit}
+          onCancel={() => setShowEditor(null)}
+          onSave={handleSave}
+        />
+      )}
+    </div>
+  );
+}
+
+function CourseEditor({ existing, unit, onCancel, onSave }) {
+  const [venue, setVenue] = useState(existing?.venue || "");
+  const [course, setCourse] = useState(existing?.course || "");
+  const [tee, setTee] = useState(existing?.tee || "");
+  const [holeCount, setHoleCount] = useState(existing?.holes?.length || 9);
+  const [jsonText, setJsonText] = useState(
+    existing ? JSON.stringify(existing.holes, null, 2) : ""
+  );
+  const [error, setError] = useState("");
+  const [parsedHoles, setParsedHoles] = useState(existing?.holes || null);
+
+  const sampleJson =
+    holeCount === 9
+      ? `[
+  {"number":1,"par":4,"distance":375},
+  {"number":2,"par":4,"distance":303},
+  {"number":3,"par":3,"distance":155},
+  {"number":4,"par":5,"distance":465},
+  {"number":5,"par":4,"distance":350},
+  {"number":6,"par":5,"distance":556},
+  {"number":7,"par":3,"distance":172},
+  {"number":8,"par":4,"distance":380},
+  {"number":9,"par":4,"distance":338}
+]`
+      : `[
+  {"number":1,"par":4,"distance":375},
+  ... (18ホール分)
+]`;
+
+  const parseAndSet = (text) => {
+    setJsonText(text);
+    setError("");
+    if (!text.trim()) {
+      setParsedHoles(null);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(text);
+      const arr = Array.isArray(parsed) ? parsed : parsed.holes;
+      if (!Array.isArray(arr)) throw new Error("配列形式が見つかりません");
+      if (arr.length !== holeCount) {
+        throw new Error(
+          `${holeCount}ホール必要です（${arr.length}ホールでした）`
+        );
+      }
+      const cleaned = arr.map((h, i) => ({
+        number: h.number ?? i + 1,
+        par: Number(h.par) || 4,
+        distance: h.distance != null ? Number(h.distance) : null,
+      }));
+      setParsedHoles(cleaned);
+    } catch (e) {
+      setError(e.message);
+      setParsedHoles(null);
+    }
+  };
+
+  const handleSave = () => {
+    if (!venue.trim()) {
+      setError("ゴルフ場名を入力してください");
+      return;
+    }
+    if (!course.trim()) {
+      setError("コース名を入力してください");
+      return;
+    }
+    if (!parsedHoles) {
+      setError("JSONをペーストしてください");
+      return;
+    }
+    onSave({
+      venue: venue.trim(),
+      course: course.trim(),
+      tee: tee || null,
+      holes: parsedHoles,
+    });
+  };
+
+  const totalPar = parsedHoles
+    ? parsedHoles.reduce((a, h) => a + (h.par || 0), 0)
+    : 0;
+  const totalDist = parsedHoles
+    ? parsedHoles.reduce((a, h) => a + (h.distance || 0), 0)
+    : 0;
+
+  return (
+    <div className="sheet-backdrop" onClick={onCancel}>
+      <div
+        className="sheet course-editor-sheet"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sheet-handle" />
+        <div className="sheet-title">
+          {existing ? "コース編集" : "コース追加"}
+        </div>
+
+        <label className="field">
+          <span className="field-label">ゴルフ場名</span>
+          <input
+            type="text"
+            value={venue}
+            placeholder="例：札幌北広島ゴルフ倶楽部【PGM】"
+            onChange={(e) => setVenue(e.target.value)}
+            disabled={!!existing}
+          />
+        </label>
+
+        <label className="field">
+          <span className="field-label">コース名（9H単位）</span>
+          <input
+            type="text"
+            value={course}
+            placeholder="例：西OUT / 東IN など"
+            onChange={(e) => setCourse(e.target.value)}
+            disabled={!!existing}
+          />
+        </label>
+
+        <div className="field">
+          <span className="field-label">ティー</span>
+          <div className="chip-row">
+            {["Blue", "White", "Red", "Gold"].map((t) => (
+              <button
+                key={t}
+                className={`chip tee-chip tee-${t.toLowerCase()} ${
+                  tee === t ? "on" : ""
+                }`}
+                onClick={() => setTee(tee === t ? "" : t)}
+                disabled={!!existing}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {!existing && (
+          <div className="field">
+            <span className="field-label">ホール数</span>
+            <div className="chip-row">
+              <button
+                className={`chip ${holeCount === 9 ? "on" : ""}`}
+                onClick={() => {
+                  setHoleCount(9);
+                  parseAndSet(jsonText);
+                }}
+              >
+                9H（推奨）
+              </button>
+              <button
+                className={`chip ${holeCount === 18 ? "on" : ""}`}
+                onClick={() => {
+                  setHoleCount(18);
+                  parseAndSet(jsonText);
+                }}
+              >
+                18H
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="json-help">
+          <div className="json-help-title">📋 Geminiへの依頼文（コピペ用）</div>
+          <div className="json-help-quote">
+            「このコースの{holeCount}ホール分のPar・距離（{unit}
+            ）を、次のJSON形式で出力してください。
+            {holeCount === 9 && (
+              <>
+                <br />※
+                1〜9番のみ。後半9Hは別コースとして登録するので含めないでください。
+              </>
+            )}
+            <br />
+            <br />
+            <code>{sampleJson}</code>」
+          </div>
+          <div className="json-help-note">
+            返ってきたJSON配列をそのまま下に貼り付け
+          </div>
+        </div>
+
+        <textarea
+          className="json-textarea"
+          placeholder={`[\n  {"number":1,"par":4,"distance":380},\n  ...\n]`}
+          value={jsonText}
+          onChange={(e) => parseAndSet(e.target.value)}
+          rows={10}
+        />
+
+        {error && <div className="json-error">⚠ {error}</div>}
+
+        {parsedHoles && (
+          <div className="course-preview">
+            <div className="course-preview-totals">
+              <span>{parsedHoles.length}H</span>
+              <span>Par {totalPar}</span>
+              <span>
+                {totalDist} {unit}
+              </span>
+            </div>
+            <div className="course-preview-holes">
+              {parsedHoles.map((h, i) => (
+                <div key={i} className="course-preview-cell">
+                  <div className="cp-num">{h.number}</div>
+                  <div className="cp-par">P{h.par}</div>
+                  <div className="cp-dist">{h.distance ?? "—"}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="sheet-actions">
+          <button className="btn-ghost" onClick={onCancel}>
+            キャンセル
+          </button>
+          <button
+            className="btn-primary"
+            onClick={handleSave}
+            disabled={!parsedHoles || !venue.trim() || !course.trim()}
+          >
+            <Check size={16} /> 保存
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const LIE_LABELS = {
   tee: "ティー",
   fw: "FW",
   rough: "ラフ",
   bunker: "バンカー",
   green: "グリーン",
+  pond: "池",
 };
 const SELF_RATING_LABELS = { good: "◎", ok: "○", miss: "△", bad: "×" };
 const OUTCOME_LABELS = {
@@ -444,6 +1041,9 @@ const OUTCOME_LABELS = {
 const DIR_LABELS = { left: "左", straight: "直", right: "右" };
 const DEPTH_LABELS = { short: "ショート", pin: "ピン", over: "オーバー" };
 
+// ============================================================
+//  KPI / AI PROMPTS
+// ============================================================
 function buildRoundReviewPrompt(round, clubs, unit) {
   const clubMap = Object.fromEntries(clubs.map((c) => [c.id, c]));
   const kpi = computeRoundKPI(round, clubs);
@@ -540,9 +1140,7 @@ function buildRoundReviewPrompt(round, clubs, unit) {
       .map((s) => s.distance);
     const dirs = shots.filter((s) => s.direction);
     const depths = shots.filter((s) => s.depth);
-    const miss = shots.filter((s) =>
-      isMissShot(s)
-    ).length;
+    const miss = shots.filter((s) => isMissShot(s)).length;
     const parts = [`${shots.length}回`];
     if (dists.length)
       parts.push(
@@ -726,9 +1324,7 @@ function computeClubStats(state) {
   return state.clubs.map((c) => {
     const data = byClub[c.id];
     const all = data.all;
-    const missCount = data.shots.filter((s) =>
-      isMissShot(s)
-    ).length;
+    const missCount = data.shots.filter((s) => isMissShot(s)).length;
     const dirShots = data.shots.filter((s) => s.direction);
     const dir = {
       left: dirShots.filter((s) => s.direction === "left").length,
@@ -871,7 +1467,7 @@ function aggregateKPI(rounds) {
 }
 
 // ============================================================
-//  SHARED: BOTTOM NAV
+//  COMPONENTS
 // ============================================================
 function BottomNav({ active, onNavigate }) {
   return (
@@ -901,158 +1497,101 @@ function BottomNav({ active, onNavigate }) {
   );
 }
 
-// ============================================================
-//  ROOT APP
-// ============================================================
-export default function App() {
-  const [state, setState] = useState(initialState);
-  const [view, setView] = useState({ name: "home" });
-
-  // チュートリアル表示判定（localStorage に完了フラグがなければ表示）
-  const [showTutorial, setShowTutorial] = useState(() => {
-    try {
-      return !localStorage.getItem("golf-shot-tracker:tutorial-done");
-    } catch {
-      return true;
-    }
-  });
-
-  const closeTutorial = () => {
-    try {
-      localStorage.setItem("golf-shot-tracker:tutorial-done", "1");
-    } catch {}
-    setShowTutorial(false);
+function AiCopyButton({ label, sublabel, onBuild, disabled }) {
+  const [state, setState] = useState("idle");
+  const handleClick = async () => {
+    if (disabled) return;
+    const text = onBuild();
+    const ok = await copyToClipboard(text);
+    setState(ok ? "ok" : "err");
+    setTimeout(() => setState("idle"), 2200);
   };
-
-  useEffect(() => saveState(state), [state]);
-
-  // viewport meta tag を動的に設定（iPhone Safariで画面サイズにフィット）
-  useEffect(() => {
-    let meta = document.querySelector('meta[name="viewport"]');
-    if (!meta) {
-      meta = document.createElement("meta");
-      meta.name = "viewport";
-      document.head.appendChild(meta);
-    }
-    meta.content =
-      "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover";
-
-    // PWA用 meta も追加（iPhone ホーム画面追加時のステータスバー対応）
-    const ensureMeta = (name, content) => {
-      let m = document.querySelector(`meta[name="${name}"]`);
-      if (!m) {
-        m = document.createElement("meta");
-        m.name = name;
-        document.head.appendChild(m);
-      }
-      m.content = content;
-    };
-    ensureMeta("apple-mobile-web-app-capable", "yes");
-    ensureMeta("apple-mobile-web-app-status-bar-style", "black-translucent");
-    ensureMeta("theme-color", "#0a0a0a");
-
-    // body の背景色を黒に
-    document.body.style.background = "#000";
-    document.documentElement.style.background = "#000";
-  }, []);
-
-  // CodeSandbox の iframe 上で動いているかを判定（バナーが表示されるか）
-  const isCodeSandbox = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      // iframe内 + CSBドメイン
-      const inIframe = window.self !== window.top;
-      const csbHost = /(\.csb\.app|codesandbox\.io)/.test(
-        window.location.hostname
-      );
-      return inIframe && csbHost;
-    } catch {
-      return true; // クロスオリジンエラー時はiframe内とみなす
-    }
-  }, []);
-
-  const activeRound =
-    view.name === "round"
-      ? state.rounds.find((r) => r.id === view.roundId)
-      : null;
-
   return (
-    <div className={`app ${isCodeSandbox ? "in-csb" : "standalone"}`}>
-      <Style />
-      <div className="phone-frame">
-        {view.name === "home" && (
-          <HomeView
-            state={state}
-            setState={setState}
-            onOpenRound={(id) => setView({ name: "round", roundId: id })}
-            onOpenTutorial={() => setShowTutorial(true)}
-          />
-        )}
-        {view.name === "round" && activeRound && (
-          <RoundView
-            round={activeRound}
-            clubs={state.clubs}
-            unit={state.unit}
-            courseMasters={state.courseMasters || []}
-            onBack={() => setView({ name: "home" })}
-            onUpdate={(updater) => {
-              setState((s) => ({
-                ...s,
-                rounds: s.rounds.map((r) =>
-                  r.id === activeRound.id ? updater(r) : r
-                ),
-              }));
-            }}
-            onUpdateCourseMaster={(venue, courseName, tee, holes) => {
-              setState((s) => ({
-                ...s,
-                courseMasters: upsertCourseMaster(
-                  s.courseMasters || [],
-                  venue,
-                  courseName,
-                  tee,
-                  holes
-                ),
-              }));
-            }}
-            onDelete={() => {
-              setState((s) => ({
-                ...s,
-                rounds: s.rounds.filter((r) => r.id !== activeRound.id),
-              }));
-              setView({ name: "home" });
-            }}
-          />
-        )}
-        {view.name === "analytics" && (
-          <AnalyticsView
-            state={state}
-            onBack={() => setView({ name: "home" })}
-          />
-        )}
-        {view.name === "courses" && (
-          <CoursesView
-            state={state}
-            setState={setState}
-            onBack={() => setView({ name: "home" })}
-          />
-        )}
-        {view.name === "clubs" && (
-          <ClubsView
-            state={state}
-            setState={setState}
-            onBack={() => setView({ name: "home" })}
-          />
+    <button
+      className={`ai-copy-btn ${state}`}
+      onClick={handleClick}
+      disabled={disabled}
+    >
+      <span className="ai-copy-icon">✨</span>
+      <div className="ai-copy-text">
+        <div className="ai-copy-label">
+          {state === "ok"
+            ? "コピー完了！Geminiに貼り付け"
+            : state === "err"
+            ? "コピー失敗"
+            : label}
+        </div>
+        {sublabel && state === "idle" && (
+          <div className="ai-copy-sub">{sublabel}</div>
         )}
       </div>
-      {/* 下部ナビは home / analytics / clubs / courses で表示、round では非表示 */}
-      {view.name !== "round" && (
-        <BottomNav
-          active={view.name}
-          onNavigate={(name) => setView({ name })}
-        />
-      )}
-      {showTutorial && <Tutorial onClose={closeTutorial} />}
+    </button>
+  );
+}
+
+function DeleteConfirmModal({
+  round,
+  totalShots,
+  recordedHoles,
+  onCancel,
+  onConfirm,
+}) {
+  // 二段階確認: 最初に警告表示、確認チェックボックスを入れて初めて削除ボタンが有効になる
+  const [confirmed, setConfirmed] = useState(false);
+
+  return (
+    <div className="sheet-backdrop" onClick={onCancel}>
+      <div className="sheet delete-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-handle" />
+        <div className="delete-icon">⚠️</div>
+        <div className="delete-title">ラウンドを削除しますか？</div>
+
+        <div className="delete-info">
+          <div className="delete-info-row">
+            <span className="delete-info-label">日付</span>
+            <span className="delete-info-value">{fmtDate(round.date)}</span>
+          </div>
+          <div className="delete-info-row">
+            <span className="delete-info-label">コース</span>
+            <span className="delete-info-value">
+              {round.course || "無題のラウンド"}
+            </span>
+          </div>
+          <div className="delete-info-row">
+            <span className="delete-info-label">記録</span>
+            <span className="delete-info-value">
+              {recordedHoles}/18ホール · {totalShots}ショット
+            </span>
+          </div>
+        </div>
+
+        <div className="delete-warning">
+          この操作は<b>取り消せません</b>。<br />
+          ショット記録・KPIデータがすべて削除されます。
+        </div>
+
+        <label className="delete-confirm-check">
+          <input
+            type="checkbox"
+            checked={confirmed}
+            onChange={(e) => setConfirmed(e.target.checked)}
+          />
+          <span>上記を理解し、削除することに同意します</span>
+        </label>
+
+        <div className="sheet-actions">
+          <button className="btn-ghost" onClick={onCancel}>
+            キャンセル
+          </button>
+          <button
+            className="btn-danger-large"
+            onClick={onConfirm}
+            disabled={!confirmed}
+          >
+            <Trash2 size={16} /> 削除する
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1060,12 +1599,7 @@ export default function App() {
 // ============================================================
 //  HOME
 // ============================================================
-function HomeView({
-  state,
-  setState,
-  onOpenRound,
-  onOpenTutorial,
-}) {
+function HomeView({ state, setState, onOpenRound, onOpenTutorial }) {
   const [showNew, setShowNew] = useState(false);
 
   const totalShots = useMemo(
@@ -2068,73 +2602,6 @@ function RoundView({
   );
 }
 
-function DeleteConfirmModal({
-  round,
-  totalShots,
-  recordedHoles,
-  onCancel,
-  onConfirm,
-}) {
-  // 二段階確認: 最初に警告表示、確認チェックボックスを入れて初めて削除ボタンが有効になる
-  const [confirmed, setConfirmed] = useState(false);
-
-  return (
-    <div className="sheet-backdrop" onClick={onCancel}>
-      <div className="sheet delete-sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="sheet-handle" />
-        <div className="delete-icon">⚠️</div>
-        <div className="delete-title">ラウンドを削除しますか？</div>
-
-        <div className="delete-info">
-          <div className="delete-info-row">
-            <span className="delete-info-label">日付</span>
-            <span className="delete-info-value">{fmtDate(round.date)}</span>
-          </div>
-          <div className="delete-info-row">
-            <span className="delete-info-label">コース</span>
-            <span className="delete-info-value">
-              {round.course || "無題のラウンド"}
-            </span>
-          </div>
-          <div className="delete-info-row">
-            <span className="delete-info-label">記録</span>
-            <span className="delete-info-value">
-              {recordedHoles}/18ホール · {totalShots}ショット
-            </span>
-          </div>
-        </div>
-
-        <div className="delete-warning">
-          この操作は<b>取り消せません</b>。<br />
-          ショット記録・KPIデータがすべて削除されます。
-        </div>
-
-        <label className="delete-confirm-check">
-          <input
-            type="checkbox"
-            checked={confirmed}
-            onChange={(e) => setConfirmed(e.target.checked)}
-          />
-          <span>上記を理解し、削除することに同意します</span>
-        </label>
-
-        <div className="sheet-actions">
-          <button className="btn-ghost" onClick={onCancel}>
-            キャンセル
-          </button>
-          <button
-            className="btn-danger-large"
-            onClick={onConfirm}
-            disabled={!confirmed}
-          >
-            <Trash2 size={16} /> 削除する
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function HoleScoreInput({ hole, onChange }) {
   const score = hole.manualScore;
   const putts = hole.manualPutts;
@@ -2367,6 +2834,383 @@ function ShotEditor({
   const [isReplayShot, setIsReplayShot] = useState(!!existing?.isReplay);
   const [memo, setMemo] = useState(existing?.memo || "");
 
+  // 音声入力 state
+  const [voiceState, setVoiceState] = useState("idle"); // idle|listening|processing|error
+  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [voiceError, setVoiceError] = useState("");
+  const [highlightFields, setHighlightFields] = useState({}); // {clubId:true, distance:true, ...}
+  const [showVoiceHelp, setShowVoiceHelp] = useState(false); // 認識可能ワード一覧の展開
+  const recognitionRef = useRef(null);
+
+  // 音声認識API対応チェック
+  const speechSupported = useMemo(() => {
+    return (
+      typeof window !== "undefined" &&
+      (window.SpeechRecognition || window.webkitSpeechRecognition)
+    );
+  }, []);
+
+  // 認識結果を解析してフィールドにマッピング
+  const parseTranscript = (text, currentValues) => {
+    const t = text;
+    // 半角数字に正規化、句読点除去
+    const normalized = t
+      .replace(/、/g, " ")
+      .replace(/。/g, " ")
+      .replace(/[,]/g, " ");
+    const updates = {};
+    const matched = {};
+
+    // クラブ
+    if (!currentValues.clubId) {
+      const clubPatterns = [
+        { id: "dr", patterns: [/ドライバー/, /\bDR\b/i, /ディーアール/] },
+        {
+          id: "3w",
+          patterns: [
+            /3\s*ウッド/,
+            /\b3W\b/i,
+            /スリー\s*ウッド/,
+            /サン\s*ウッド/,
+          ],
+        },
+        {
+          id: "5w",
+          patterns: [
+            /5\s*ウッド/,
+            /\b5W\b/i,
+            /ファイブ\s*ウッド/,
+            /ゴ\s*ウッド/,
+          ],
+        },
+        {
+          id: "u4",
+          patterns: [
+            /4\s*ユーティリ/,
+            /\bU4\b/i,
+            /ユーティリティ.*4/,
+            /4\s*ユーテ/,
+          ],
+        },
+        {
+          id: "u5",
+          patterns: [
+            /5\s*ユーティリ/,
+            /\bU5\b/i,
+            /ユーティリティ.*5/,
+            /5\s*ユーテ/,
+          ],
+        },
+        {
+          id: "5i",
+          patterns: [
+            /5\s*アイアン/,
+            /\b5I\b/i,
+            /ファイブ\s*アイアン/,
+            /ゴ\s*ばん/,
+          ],
+        },
+        {
+          id: "6i",
+          patterns: [
+            /6\s*アイアン/,
+            /\b6I\b/i,
+            /シックス\s*アイアン/,
+            /ロク\s*ばん/,
+          ],
+        },
+        {
+          id: "7i",
+          patterns: [
+            /7\s*アイアン/,
+            /\b7I\b/i,
+            /セブン\s*アイアン/,
+            /ナナ\s*ばん/,
+          ],
+        },
+        {
+          id: "8i",
+          patterns: [
+            /8\s*アイアン/,
+            /\b8I\b/i,
+            /エイト\s*アイアン/,
+            /ハチ\s*ばん/,
+          ],
+        },
+        {
+          id: "9i",
+          patterns: [
+            /9\s*アイアン/,
+            /\b9I\b/i,
+            /ナイン\s*アイアン/,
+            /キュウ\s*ばん/,
+          ],
+        },
+        { id: "pw", patterns: [/ピッチング/, /\bPW\b/i, /ピー\s*ダブリュー/] },
+        {
+          id: "aw",
+          patterns: [
+            /アプローチ\s*ウェッジ/,
+            /\bAW\b/i,
+            /エー\s*ダブリュー/,
+            /ギャップ/,
+          ],
+        },
+        { id: "sw", patterns: [/サンド/, /\bSW\b/i, /エス\s*ダブリュー/] },
+        { id: "pt", patterns: [/パター/, /\bPT\b/i, /ピーティー/] },
+      ];
+      for (const cp of clubPatterns) {
+        if (cp.patterns.some((p) => p.test(normalized))) {
+          // この id のクラブが clubs に存在するか
+          const club = clubs.find((c) => c.id === cp.id);
+          if (club) {
+            updates.clubId = cp.id;
+            // 平均距離も自動入力
+            if (club.avgDistance != null && !currentValues.distance) {
+              updates.distance = club.avgDistance;
+            }
+            matched.clubId = true;
+            break;
+          }
+        }
+      }
+    }
+
+    // 距離（数字 + ヤード/メートルなど）
+    if (!currentValues.distance) {
+      // 「ドライバーで220ヤード」「100m」などから抽出
+      const distMatch = normalized.match(
+        /(\d{2,3})\s*(?:ヤード|ヤー|ヤ|メートル|メーター|m|y)?/i
+      );
+      if (distMatch) {
+        const num = parseInt(distMatch[1], 10);
+        if (num >= 5 && num <= 400) {
+          updates.distance = num;
+          matched.distance = true;
+        }
+      }
+    }
+
+    // 着地（次のライ）
+    if (currentValues.nextLie === "fw") {
+      // デフォルト値の場合のみ上書き対象とする
+    }
+    {
+      const lieMap = [
+        { id: "fw", patterns: [/フェアウェイ/, /フェアウェー/, /\bFW\b/i] },
+        { id: "rough", patterns: [/ラフ/] },
+        { id: "bunker", patterns: [/バンカー/, /砂/] },
+        {
+          id: "green",
+          patterns: [
+            /グリーン.*オン/,
+            /^オン$/,
+            /グリーン乗/,
+            /(?<![\w])オン(?![\w])/,
+            /乗った/,
+            /グリーン$/,
+            /グリーンに/,
+          ],
+        },
+        { id: "tee", patterns: [/ティー(?!アップ)/] },
+        { id: "pond", patterns: [/池/, /ウォーター/, /水/] },
+      ];
+      // ユーザーが既に nextLie を変更している場合は上書きしない
+      // 初期値 "fw" のときだけ上書き対象
+      if (currentValues.nextLie === "fw" || !currentValues.nextLieTouched) {
+        for (const lm of lieMap) {
+          if (lm.patterns.some((p) => p.test(normalized))) {
+            updates.nextLie = lm.id;
+            matched.nextLie = true;
+            break;
+          }
+        }
+      }
+    }
+
+    // 方向
+    if (!currentValues.direction) {
+      if (/フック|左/.test(normalized)) {
+        updates.direction = "left";
+        matched.direction = true;
+      } else if (/スライス|右/.test(normalized)) {
+        updates.direction = "right";
+        matched.direction = true;
+      } else if (/ストレート|真っ?直ぐ|直/.test(normalized)) {
+        updates.direction = "straight";
+        matched.direction = true;
+      }
+    }
+
+    // 距離感
+    if (!currentValues.depth) {
+      if (/ショート|手前|短/.test(normalized)) {
+        updates.depth = "short";
+        matched.depth = true;
+      } else if (/ピン(?!.*オン)|ピンそば|ベタピン/.test(normalized)) {
+        updates.depth = "pin";
+        matched.depth = true;
+      } else if (/オーバー|奥|長/.test(normalized)) {
+        updates.depth = "over";
+        matched.depth = true;
+      }
+    }
+
+    // 自己評価
+    if (!currentValues.selfRating) {
+      if (/完璧|ナイス|ベスト|◎/.test(normalized)) {
+        updates.selfRating = "good";
+        matched.selfRating = true;
+      } else if (/まあまあ|普通|そこそこ|△/.test(normalized)) {
+        updates.selfRating = "miss";
+        matched.selfRating = true;
+      } else if (/ミス|ダメ|×|バツ/.test(normalized)) {
+        updates.selfRating = "bad";
+        matched.selfRating = true;
+      } else if (/良い|いい|よかった|○|マル/.test(normalized)) {
+        updates.selfRating = "ok";
+        matched.selfRating = true;
+      }
+    }
+
+    // 結果（outcome）
+    if (currentValues.outcome === "in_play") {
+      if (/オービー|\bOB\b/i.test(normalized)) {
+        updates.outcome = "ob";
+        matched.outcome = true;
+      } else if (/ロスト|紛失/.test(normalized)) {
+        updates.outcome = "lost";
+        matched.outcome = true;
+      } else if (/赤杭|赤/.test(normalized)) {
+        updates.outcome = "penalty_red";
+        matched.outcome = true;
+      } else if (/黄杭|黄/.test(normalized)) {
+        updates.outcome = "penalty_yellow";
+        matched.outcome = true;
+      }
+    }
+
+    // 打ち直し
+    if (!currentValues.isReplay) {
+      if (/打ち直し|打ちなおし|打直し/.test(normalized)) {
+        updates.isReplay = true;
+        matched.isReplay = true;
+      }
+    }
+
+    return { updates, matched };
+  };
+
+  const startVoiceInput = () => {
+    if (!speechSupported) {
+      setVoiceError("音声入力はこのブラウザで対応していません");
+      setVoiceState("error");
+      setTimeout(() => setVoiceState("idle"), 3000);
+      return;
+    }
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.lang = "ja-JP";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setVoiceState("listening");
+      setVoiceTranscript("");
+      setVoiceError("");
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setVoiceTranscript(transcript);
+      setVoiceState("processing");
+
+      // 現在の値を集めて parse に渡す
+      const currentValues = {
+        clubId,
+        distance,
+        nextLie,
+        direction,
+        depth,
+        selfRating,
+        outcome,
+        isReplay: isReplayShot,
+      };
+      const { updates, matched } = parseTranscript(transcript, currentValues);
+
+      // フィールドを更新
+      if ("clubId" in updates) setClubId(updates.clubId);
+      if ("distance" in updates) setDistance(updates.distance);
+      if ("nextLie" in updates) setNextLie(updates.nextLie);
+      if ("direction" in updates) setDirection(updates.direction);
+      if ("depth" in updates) setDepth(updates.depth);
+      if ("selfRating" in updates) setSelfRating(updates.selfRating);
+      if ("outcome" in updates) setOutcome(updates.outcome);
+      if ("isReplay" in updates) setIsReplayShot(updates.isReplay);
+
+      // ハイライト表示（2秒）
+      setHighlightFields(matched);
+      setTimeout(() => setHighlightFields({}), 2500);
+
+      // マッチした項目数を確認
+      const matchedCount = Object.keys(matched).length;
+      if (matchedCount === 0) {
+        setVoiceError("認識できませんでした。もう一度お試しください");
+        setVoiceState("error");
+        setTimeout(() => {
+          setVoiceState("idle");
+          setVoiceError("");
+        }, 3000);
+      } else {
+        setVoiceState("idle");
+        // 認識テキストはしばらく表示しておく
+        setTimeout(() => setVoiceTranscript(""), 4000);
+      }
+    };
+
+    recognition.onerror = (event) => {
+      let msg = "音声認識エラー";
+      if (event.error === "not-allowed") {
+        msg = "マイクの使用が許可されていません";
+      } else if (event.error === "no-speech") {
+        msg = "音声が検出されませんでした";
+      } else if (event.error === "network") {
+        msg = "ネットワークエラー";
+      }
+      setVoiceError(msg);
+      setVoiceState("error");
+      setTimeout(() => {
+        setVoiceState("idle");
+        setVoiceError("");
+      }, 3000);
+    };
+
+    recognition.onend = () => {
+      if (voiceState === "listening") {
+        setVoiceState("idle");
+      }
+    };
+
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch (e) {
+      setVoiceError("音声認識を開始できませんでした");
+      setVoiceState("error");
+    }
+  };
+
+  const stopVoiceInput = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+    }
+    setVoiceState("idle");
+  };
+
   // クラブ選択時は常に平均飛距離で上書き
   const handleClubSelect = (c) => {
     setClubId(c.id);
@@ -2416,7 +3260,118 @@ function ShotEditor({
           </button>
         </div>
 
-        <div className="editor-section">
+        {/* v2.1: 音声入力 */}
+        {speechSupported && (
+          <div className="voice-input-section">
+            <button
+              className={`voice-input-btn ${voiceState}`}
+              onClick={
+                voiceState === "listening" ? stopVoiceInput : startVoiceInput
+              }
+              disabled={voiceState === "processing"}
+            >
+              <span className="voice-icon">
+                {voiceState === "listening" ? "■" : "🎤"}
+              </span>
+              <span className="voice-label">
+                {voiceState === "listening"
+                  ? "録音中… タップで停止"
+                  : voiceState === "processing"
+                  ? "認識中…"
+                  : voiceState === "error"
+                  ? voiceError
+                  : "音声で入力"}
+              </span>
+            </button>
+            {voiceTranscript && (
+              <div className="voice-transcript">「{voiceTranscript}」</div>
+            )}
+            <div className="voice-hint">
+              例：「ドライバー 220ヤード フェアウェイ まあまあ」
+            </div>
+            <button
+              className="voice-help-toggle"
+              onClick={() => setShowVoiceHelp(!showVoiceHelp)}
+            >
+              {showVoiceHelp
+                ? "▲ 認識ワード一覧を閉じる"
+                : "▼ 認識できる言葉を見る"}
+            </button>
+            {showVoiceHelp && (
+              <div className="voice-help-list">
+                <div className="voice-help-cat">
+                  <div className="voice-help-cat-name">🏌 クラブ</div>
+                  <div className="voice-help-words">
+                    ドライバー / 3ウッド / 5ウッド / 4ユーティリティ /
+                    5ユーティリティ / 5アイアン / 6アイアン / 7アイアン /
+                    8アイアン / 9アイアン / ピッチング / アプローチウェッジ /
+                    サンド / パター
+                  </div>
+                </div>
+                <div className="voice-help-cat">
+                  <div className="voice-help-cat-name">📏 距離</div>
+                  <div className="voice-help-words">
+                    数字（5〜400）・「ヤード」「メートル」付けても可
+                    <br />
+                    例：「220」「220ヤード」「100m」
+                  </div>
+                </div>
+                <div className="voice-help-cat">
+                  <div className="voice-help-cat-name">🌱 ライ（着地）</div>
+                  <div className="voice-help-words">
+                    フェアウェイ / ラフ / バンカー / グリーン / オン / ティー /
+                    池 / ウォーター
+                  </div>
+                </div>
+                <div className="voice-help-cat">
+                  <div className="voice-help-cat-name">↔ 方向</div>
+                  <div className="voice-help-words">
+                    左 / フック / 右 / スライス / ストレート / 真っ直ぐ
+                  </div>
+                </div>
+                <div className="voice-help-cat">
+                  <div className="voice-help-cat-name">📐 距離感</div>
+                  <div className="voice-help-words">
+                    ショート / 短い / 手前 / ピン / ピンそば / ベタピン /
+                    オーバー / 奥 / 長い
+                  </div>
+                </div>
+                <div className="voice-help-cat">
+                  <div className="voice-help-cat-name">⭐ 自己評価</div>
+                  <div className="voice-help-words">
+                    完璧 / ナイス / ベスト → ◎
+                    <br />
+                    良い / いい / よかった → ○
+                    <br />
+                    まあまあ / 普通 / そこそこ → △
+                    <br />
+                    ミス / ダメ / バツ → ×
+                  </div>
+                </div>
+                <div className="voice-help-cat">
+                  <div className="voice-help-cat-name">🚩 結果</div>
+                  <div className="voice-help-words">
+                    OB / オービー / ロスト / 紛失 / 赤杭 / 黄杭
+                  </div>
+                </div>
+                <div className="voice-help-cat">
+                  <div className="voice-help-cat-name">↻ 打ち直し</div>
+                  <div className="voice-help-words">打ち直し / 打ちなおし</div>
+                </div>
+                <div className="voice-help-note">
+                  ⚠️ 既に入力されている項目は音声入力で上書きされません。
+                  音声で埋めたい項目はクリアしてからご利用ください。
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div
+          className={`editor-section ${
+            highlightFields.clubId ? "highlight" : ""
+          }`}
+        >
           <div className="editor-label">クラブ</div>
           <div className="club-grid-compact">
             {grouped.map((g) => (
@@ -2440,7 +3395,11 @@ function ShotEditor({
           </div>
         </div>
 
-        <div className="editor-section">
+        <div
+          className={`editor-section ${
+            highlightFields.distance ? "highlight" : ""
+          }`}
+        >
           <div className="editor-label">飛距離</div>
           <div className="distance-display">
             <input
@@ -2470,9 +3429,13 @@ function ShotEditor({
           </div>
         </div>
 
-        <div className="editor-section two-col">
+        <div
+          className={`editor-section two-col ${
+            highlightFields.nextLie ? "highlight" : ""
+          }`}
+        >
           <div>
-            <div className="editor-label">打点（ライ）</div>
+            <div className="editor-label">打つ場所（ライ）</div>
             <div className="chip-row tight">
               {LIES.map((l) => (
                 <button
@@ -2501,7 +3464,13 @@ function ShotEditor({
           </div>
         </div>
 
-        <div className="editor-section">
+        <div
+          className={`editor-section ${
+            highlightFields.direction || highlightFields.depth
+              ? "highlight"
+              : ""
+          }`}
+        >
           <div className="editor-label">ショット</div>
           <div className="shot-tendency-grid">
             <button
@@ -2549,7 +3518,11 @@ function ShotEditor({
           </div>
         </div>
 
-        <div className="editor-section">
+        <div
+          className={`editor-section ${
+            highlightFields.selfRating ? "highlight" : ""
+          }`}
+        >
           <div className="editor-label">自己評価（任意）</div>
           <div className="result-row">
             {SELF_RATINGS.map((r) => (
@@ -2558,9 +3531,7 @@ function ShotEditor({
                 className={`result-btn tone-${r.tone} ${
                   selfRating === r.id ? "on" : ""
                 }`}
-                onClick={() =>
-                  setSelfRating(selfRating === r.id ? null : r.id)
-                }
+                onClick={() => setSelfRating(selfRating === r.id ? null : r.id)}
                 title={r.desc}
               >
                 {r.label}
@@ -2569,7 +3540,11 @@ function ShotEditor({
           </div>
         </div>
 
-        <div className="editor-section">
+        <div
+          className={`editor-section ${
+            highlightFields.outcome ? "highlight" : ""
+          }`}
+        >
           <div className="editor-label">結果</div>
           <div className="outcome-row">
             {OUTCOMES.map((o) => (
@@ -2586,7 +3561,11 @@ function ShotEditor({
           </div>
         </div>
 
-        <div className="editor-section">
+        <div
+          className={`editor-section ${
+            highlightFields.isReplay ? "highlight" : ""
+          }`}
+        >
           <label className="replay-toggle">
             <input
               type="checkbox"
@@ -2644,41 +3623,6 @@ function ShotEditor({
         </div>
       </div>
     </div>
-  );
-}
-
-// ============================================================
-//  AI COPY BUTTON
-// ============================================================
-function AiCopyButton({ label, sublabel, onBuild, disabled }) {
-  const [state, setState] = useState("idle");
-  const handleClick = async () => {
-    if (disabled) return;
-    const text = onBuild();
-    const ok = await copyToClipboard(text);
-    setState(ok ? "ok" : "err");
-    setTimeout(() => setState("idle"), 2200);
-  };
-  return (
-    <button
-      className={`ai-copy-btn ${state}`}
-      onClick={handleClick}
-      disabled={disabled}
-    >
-      <span className="ai-copy-icon">✨</span>
-      <div className="ai-copy-text">
-        <div className="ai-copy-label">
-          {state === "ok"
-            ? "コピー完了！Geminiに貼り付け"
-            : state === "err"
-            ? "コピー失敗"
-            : label}
-        </div>
-        {sublabel && state === "idle" && (
-          <div className="ai-copy-sub">{sublabel}</div>
-        )}
-      </div>
-    </button>
   );
 }
 
@@ -3161,445 +4105,6 @@ function KpiRow({ label, recent, all, unit = "", lowerIsBetter = false }) {
   );
 }
 
-// ============================================================
-//  COURSES MASTER
-// ============================================================
-function CoursesView({ state, setState, onBack }) {
-  const [showEditor, setShowEditor] = useState(null); // null | 'new' | { venue, course, tee } (edit)
-
-  // userMastersをメモ化（state.courseMastersが未定義のときに新配列を毎回作らないように）
-  const userMasters = useMemo(
-    () => state.courseMasters || [],
-    [state.courseMasters]
-  );
-
-  // 統合一覧：DEFAULT_COURSES + userMasters（venue+course+tee重複時はuserMasters優先）
-  const merged = useMemo(() => {
-    const map = new Map();
-    const keyOf = (c) => `${c.venue}::${c.course}::${c.tee || ""}`;
-    DEFAULT_COURSES.forEach((c) => {
-      map.set(keyOf(c), { ...c, source: "default" });
-    });
-    userMasters.forEach((c) => {
-      const k = keyOf(c);
-      const exists = map.has(k);
-      map.set(k, { ...c, source: exists ? "override" : "user" });
-    });
-    return Array.from(map.values());
-  }, [userMasters]);
-
-  // venue別にグループ化
-  const groupedByVenue = useMemo(() => {
-    const groups = new Map();
-    merged.forEach((c) => {
-      if (!groups.has(c.venue)) groups.set(c.venue, []);
-      groups.get(c.venue).push(c);
-    });
-    return Array.from(groups.entries()).map(([venue, courses]) => ({
-      venue,
-      courses,
-    }));
-  }, [merged]);
-
-  const handleSave = ({ venue, course, tee, holes }) => {
-    setState((s) => ({
-      ...s,
-      courseMasters: upsertCourseMaster(
-        s.courseMasters || [],
-        venue,
-        course,
-        tee,
-        holes
-      ),
-    }));
-    setShowEditor(null);
-  };
-
-  const handleDelete = (venue, course, tee) => {
-    const teeLabel = tee ? ` (${tee})` : "";
-    if (
-      !window.confirm(
-        `「${venue} / ${course}${teeLabel}」を削除しますか？\n（コード埋め込みデータがあればそちらに戻ります）`
-      )
-    )
-      return;
-    setState((s) => ({
-      ...s,
-      courseMasters: (s.courseMasters || []).filter(
-        (c) =>
-          !(
-            c.venue === venue &&
-            c.course === course &&
-            (c.tee || null) === (tee || null)
-          )
-      ),
-    }));
-  };
-
-  return (
-    <div className="screen">
-      <header className="topbar">
-        <button className="icon-btn" onClick={onBack}>
-          <ChevronLeft size={22} />
-        </button>
-        <div className="topbar-title">
-          <div className="topbar-course">コースマスター</div>
-          <div className="topbar-meta">
-            {merged.length} コース · {groupedByVenue.length} ゴルフ場
-          </div>
-        </div>
-        <button className="icon-btn" onClick={() => setShowEditor("new")}>
-          <Plus size={20} />
-        </button>
-      </header>
-
-      <div className="cm-help">
-        💡 Geminiにスコアカード画像を投げてJSONをもらい、貼り付けて登録します。
-        <br />
-        ラウンド中にPar・距離を編集すると、対応するコースマスターも自動で上書きされます。
-      </div>
-
-      {merged.length === 0 ? (
-        <div className="empty">
-          <div className="empty-icon">⛳</div>
-          <div className="empty-title">コース未登録</div>
-          <div className="empty-sub">右上の＋からコースを追加できます</div>
-        </div>
-      ) : (
-        <div className="cm-list">
-          {groupedByVenue.map((g) => (
-            <div key={g.venue} className="cm-venue-group">
-              <div className="cm-venue-name">{g.venue}</div>
-              <div className="cm-courses">
-                {g.courses.map((c) => {
-                  const totalPar = c.holes.reduce(
-                    (a, h) => a + (h.par || 0),
-                    0
-                  );
-                  const totalDist = c.holes.reduce(
-                    (a, h) => a + (h.distance || 0),
-                    0
-                  );
-                  const cardKey = `${c.venue}::${c.course}::${c.tee || ""}`;
-                  return (
-                    <div key={cardKey} className="cm-course-card">
-                      <button
-                        className="cm-course-main"
-                        onClick={() =>
-                          setShowEditor({
-                            venue: c.venue,
-                            course: c.course,
-                            tee: c.tee || null,
-                          })
-                        }
-                      >
-                        <div className="cm-course-head">
-                          <div className="cm-course-name">
-                            {c.course}
-                            {c.tee && (
-                              <span
-                                className={`cm-tee-badge tee-${c.tee.toLowerCase()}`}
-                              >
-                                {c.tee}
-                              </span>
-                            )}
-                          </div>
-                          <div className={`cm-source cm-source-${c.source}`}>
-                            {c.source === "default"
-                              ? "標準"
-                              : c.source === "override"
-                              ? "上書"
-                              : "追加"}
-                          </div>
-                        </div>
-                        <div className="cm-course-meta">
-                          <span>{c.holes.length}H</span>
-                          <span>Par {totalPar}</span>
-                          <span>
-                            {totalDist} {state.unit}
-                          </span>
-                        </div>
-                        <div className="cm-course-pars">
-                          {c.holes.map((h, i) => (
-                            <span key={i} className="cm-par-cell">
-                              {h.par}
-                            </span>
-                          ))}
-                        </div>
-                      </button>
-                      {(c.source === "override" || c.source === "user") && (
-                        <button
-                          className="cm-delete"
-                          onClick={() =>
-                            handleDelete(c.venue, c.course, c.tee || null)
-                          }
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {showEditor && (
-        <CourseEditor
-          existing={
-            showEditor === "new"
-              ? null
-              : merged.find(
-                  (c) =>
-                    c.venue === showEditor.venue &&
-                    c.course === showEditor.course &&
-                    (c.tee || null) === (showEditor.tee || null)
-                )
-          }
-          unit={state.unit}
-          onCancel={() => setShowEditor(null)}
-          onSave={handleSave}
-        />
-      )}
-    </div>
-  );
-}
-
-function CourseEditor({ existing, unit, onCancel, onSave }) {
-  const [venue, setVenue] = useState(existing?.venue || "");
-  const [course, setCourse] = useState(existing?.course || "");
-  const [tee, setTee] = useState(existing?.tee || "");
-  const [holeCount, setHoleCount] = useState(existing?.holes?.length || 9);
-  const [jsonText, setJsonText] = useState(
-    existing ? JSON.stringify(existing.holes, null, 2) : ""
-  );
-  const [error, setError] = useState("");
-  const [parsedHoles, setParsedHoles] = useState(existing?.holes || null);
-
-  const sampleJson =
-    holeCount === 9
-      ? `[
-  {"number":1,"par":4,"distance":375},
-  {"number":2,"par":4,"distance":303},
-  {"number":3,"par":3,"distance":155},
-  {"number":4,"par":5,"distance":465},
-  {"number":5,"par":4,"distance":350},
-  {"number":6,"par":5,"distance":556},
-  {"number":7,"par":3,"distance":172},
-  {"number":8,"par":4,"distance":380},
-  {"number":9,"par":4,"distance":338}
-]`
-      : `[
-  {"number":1,"par":4,"distance":375},
-  ... (18ホール分)
-]`;
-
-  const parseAndSet = (text) => {
-    setJsonText(text);
-    setError("");
-    if (!text.trim()) {
-      setParsedHoles(null);
-      return;
-    }
-    try {
-      const parsed = JSON.parse(text);
-      const arr = Array.isArray(parsed) ? parsed : parsed.holes;
-      if (!Array.isArray(arr)) throw new Error("配列形式が見つかりません");
-      if (arr.length !== holeCount) {
-        throw new Error(
-          `${holeCount}ホール必要です（${arr.length}ホールでした）`
-        );
-      }
-      const cleaned = arr.map((h, i) => ({
-        number: h.number ?? i + 1,
-        par: Number(h.par) || 4,
-        distance: h.distance != null ? Number(h.distance) : null,
-      }));
-      setParsedHoles(cleaned);
-    } catch (e) {
-      setError(e.message);
-      setParsedHoles(null);
-    }
-  };
-
-  const handleSave = () => {
-    if (!venue.trim()) {
-      setError("ゴルフ場名を入力してください");
-      return;
-    }
-    if (!course.trim()) {
-      setError("コース名を入力してください");
-      return;
-    }
-    if (!parsedHoles) {
-      setError("JSONをペーストしてください");
-      return;
-    }
-    onSave({
-      venue: venue.trim(),
-      course: course.trim(),
-      tee: tee || null,
-      holes: parsedHoles,
-    });
-  };
-
-  const totalPar = parsedHoles
-    ? parsedHoles.reduce((a, h) => a + (h.par || 0), 0)
-    : 0;
-  const totalDist = parsedHoles
-    ? parsedHoles.reduce((a, h) => a + (h.distance || 0), 0)
-    : 0;
-
-  return (
-    <div className="sheet-backdrop" onClick={onCancel}>
-      <div
-        className="sheet course-editor-sheet"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="sheet-handle" />
-        <div className="sheet-title">
-          {existing ? "コース編集" : "コース追加"}
-        </div>
-
-        <label className="field">
-          <span className="field-label">ゴルフ場名</span>
-          <input
-            type="text"
-            value={venue}
-            placeholder="例：札幌北広島ゴルフ倶楽部【PGM】"
-            onChange={(e) => setVenue(e.target.value)}
-            disabled={!!existing}
-          />
-        </label>
-
-        <label className="field">
-          <span className="field-label">コース名（9H単位）</span>
-          <input
-            type="text"
-            value={course}
-            placeholder="例：西OUT / 東IN など"
-            onChange={(e) => setCourse(e.target.value)}
-            disabled={!!existing}
-          />
-        </label>
-
-        <div className="field">
-          <span className="field-label">ティー</span>
-          <div className="chip-row">
-            {["Blue", "White", "Red", "Gold"].map((t) => (
-              <button
-                key={t}
-                className={`chip tee-chip tee-${t.toLowerCase()} ${
-                  tee === t ? "on" : ""
-                }`}
-                onClick={() => setTee(tee === t ? "" : t)}
-                disabled={!!existing}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {!existing && (
-          <div className="field">
-            <span className="field-label">ホール数</span>
-            <div className="chip-row">
-              <button
-                className={`chip ${holeCount === 9 ? "on" : ""}`}
-                onClick={() => {
-                  setHoleCount(9);
-                  parseAndSet(jsonText);
-                }}
-              >
-                9H（推奨）
-              </button>
-              <button
-                className={`chip ${holeCount === 18 ? "on" : ""}`}
-                onClick={() => {
-                  setHoleCount(18);
-                  parseAndSet(jsonText);
-                }}
-              >
-                18H
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="json-help">
-          <div className="json-help-title">📋 Geminiへの依頼文（コピペ用）</div>
-          <div className="json-help-quote">
-            「このコースの{holeCount}ホール分のPar・距離（{unit}
-            ）を、次のJSON形式で出力してください。
-            {holeCount === 9 && (
-              <>
-                <br />※
-                1〜9番のみ。後半9Hは別コースとして登録するので含めないでください。
-              </>
-            )}
-            <br />
-            <br />
-            <code>{sampleJson}</code>」
-          </div>
-          <div className="json-help-note">
-            返ってきたJSON配列をそのまま下に貼り付け
-          </div>
-        </div>
-
-        <textarea
-          className="json-textarea"
-          placeholder={`[\n  {"number":1,"par":4,"distance":380},\n  ...\n]`}
-          value={jsonText}
-          onChange={(e) => parseAndSet(e.target.value)}
-          rows={10}
-        />
-
-        {error && <div className="json-error">⚠ {error}</div>}
-
-        {parsedHoles && (
-          <div className="course-preview">
-            <div className="course-preview-totals">
-              <span>{parsedHoles.length}H</span>
-              <span>Par {totalPar}</span>
-              <span>
-                {totalDist} {unit}
-              </span>
-            </div>
-            <div className="course-preview-holes">
-              {parsedHoles.map((h, i) => (
-                <div key={i} className="course-preview-cell">
-                  <div className="cp-num">{h.number}</div>
-                  <div className="cp-par">P{h.par}</div>
-                  <div className="cp-dist">{h.distance ?? "—"}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="sheet-actions">
-          <button className="btn-ghost" onClick={onCancel}>
-            キャンセル
-          </button>
-          <button
-            className="btn-primary"
-            onClick={handleSave}
-            disabled={!parsedHoles || !venue.trim() || !course.trim()}
-          >
-            <Check size={16} /> 保存
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
-//  CLUBS MANAGEMENT
-// ============================================================
 function ClubsView({ state, setState, onBack }) {
   const [editingId, setEditingId] = useState(null); // 距離編集中のクラブID
   const [draftDistance, setDraftDistance] = useState("");
@@ -3914,9 +4419,6 @@ function ClubAddSheet({ onCancel, onSave, unit }) {
   );
 }
 
-// ============================================================
-//  TUTORIAL (オンボーディング)
-// ============================================================
 function Tutorial({ onClose }) {
   const [step, setStep] = useState(0);
 
@@ -5104,6 +5606,155 @@ function Style() {
         font-size: 13px; color: var(--text-dim);
       }
       .editor-section { margin-bottom: 14px; }
+
+      /* v2.1: 音声入力でハイライト */
+      .editor-section.highlight {
+        animation: voiceFlash 2.5s ease-out;
+      }
+      @keyframes voiceFlash {
+        0%, 30% {
+          background: rgba(182, 242, 74, 0.15);
+          box-shadow: 0 0 0 2px var(--green-dim);
+          border-radius: 8px;
+        }
+        100% {
+          background: transparent;
+          box-shadow: 0 0 0 0 transparent;
+        }
+      }
+
+      /* 音声入力ボタン */
+      .voice-input-section {
+        margin-bottom: 16px;
+        padding: 12px;
+        background: var(--bg-2);
+        border-radius: 12px;
+        border: 1px solid var(--border-soft);
+      }
+      .voice-input-btn {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 12px 16px;
+        background: var(--bg-1);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text);
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .voice-input-btn:active {
+        transform: scale(0.98);
+      }
+      .voice-input-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .voice-input-btn.listening {
+        background: var(--red);
+        color: #fff;
+        border-color: var(--red);
+        animation: voicePulse 1.5s ease-in-out infinite;
+      }
+      .voice-input-btn.processing {
+        background: rgba(94, 184, 255, 0.18);
+        color: var(--tone-ok);
+        border-color: var(--tone-ok);
+      }
+      .voice-input-btn.error {
+        background: rgba(255, 107, 107, 0.18);
+        color: var(--red);
+        border-color: var(--red);
+      }
+      @keyframes voicePulse {
+        0%, 100% {
+          box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.6);
+        }
+        50% {
+          box-shadow: 0 0 0 8px rgba(255, 107, 107, 0);
+        }
+      }
+      .voice-icon {
+        font-size: 16px;
+      }
+      .voice-transcript {
+        margin-top: 8px;
+        padding: 8px 10px;
+        background: rgba(182, 242, 74, 0.08);
+        border-radius: 8px;
+        font-size: 12px;
+        color: var(--text-dim);
+        text-align: center;
+      }
+      .voice-hint {
+        margin-top: 8px;
+        font-size: 11px;
+        color: var(--text-faint);
+        text-align: center;
+        line-height: 1.5;
+      }
+
+      /* v2.1: 認識ワード一覧トグル */
+      .voice-help-toggle {
+        display: block;
+        width: 100%;
+        margin-top: 8px;
+        padding: 6px 8px;
+        background: transparent;
+        border: 1px dashed var(--border-soft);
+        border-radius: 6px;
+        color: var(--text-dim);
+        font-size: 11px;
+        cursor: pointer;
+        text-align: center;
+      }
+      .voice-help-toggle:active {
+        background: var(--bg-1);
+      }
+      .voice-help-list {
+        margin-top: 10px;
+        padding: 12px;
+        background: var(--bg-1);
+        border: 1px solid var(--border-soft);
+        border-radius: 10px;
+        max-height: 320px;
+        overflow-y: auto;
+      }
+      .voice-help-cat {
+        margin-bottom: 12px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--border-soft);
+      }
+      .voice-help-cat:last-of-type {
+        border-bottom: none;
+        margin-bottom: 4px;
+      }
+      .voice-help-cat-name {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--green);
+        margin-bottom: 4px;
+      }
+      .voice-help-words {
+        font-size: 11px;
+        color: var(--text-dim);
+        line-height: 1.7;
+        word-break: break-word;
+      }
+      .voice-help-note {
+        margin-top: 4px;
+        padding: 8px 10px;
+        background: rgba(255, 184, 77, 0.1);
+        border: 1px solid rgba(255, 184, 77, 0.25);
+        border-radius: 8px;
+        font-size: 10px;
+        color: var(--amber);
+        line-height: 1.5;
+      }
       .editor-section.two-col {
         display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
       }
