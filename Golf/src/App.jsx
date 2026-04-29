@@ -1101,7 +1101,7 @@ function buildRoundReviewPrompt(round, clubs, unit) {
   lines.push("## 全ショット一覧");
   lines.push("");
   lines.push(
-    "| ホール | Par | # | クラブ | 距離 | 打点 | 着地 | 方向 | 距離感 | 自己評価 | 結果 | 打ち直し | メモ |"
+    "| ホール | Par | # | クラブ | 距離 | 打つ場所 | 着地 | 方向 | 距離感 | 自己評価 | 結果 | 打ち直し | メモ |"
   );
   lines.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|");
   round.holes.forEach((h) => {
@@ -1140,7 +1140,9 @@ function buildRoundReviewPrompt(round, clubs, unit) {
       .map((s) => s.distance);
     const dirs = shots.filter((s) => s.direction);
     const depths = shots.filter((s) => s.depth);
-    const miss = shots.filter((s) => isMissShot(s)).length;
+    const miss = shots.filter((s) =>
+      isMissShot(s)
+    ).length;
     const parts = [`${shots.length}回`];
     if (dists.length)
       parts.push(
@@ -1324,7 +1326,9 @@ function computeClubStats(state) {
   return state.clubs.map((c) => {
     const data = byClub[c.id];
     const all = data.all;
-    const missCount = data.shots.filter((s) => isMissShot(s)).length;
+    const missCount = data.shots.filter((s) =>
+      isMissShot(s)
+    ).length;
     const dirShots = data.shots.filter((s) => s.direction);
     const dir = {
       left: dirShots.filter((s) => s.direction === "left").length,
@@ -1599,7 +1603,12 @@ function DeleteConfirmModal({
 // ============================================================
 //  HOME
 // ============================================================
-function HomeView({ state, setState, onOpenRound, onOpenTutorial }) {
+function HomeView({
+  state,
+  setState,
+  onOpenRound,
+  onOpenTutorial,
+}) {
   const [showNew, setShowNew] = useState(false);
 
   const totalShots = useMemo(
@@ -2865,97 +2874,17 @@ function ShotEditor({
     if (!currentValues.clubId) {
       const clubPatterns = [
         { id: "dr", patterns: [/ドライバー/, /\bDR\b/i, /ディーアール/] },
-        {
-          id: "3w",
-          patterns: [
-            /3\s*ウッド/,
-            /\b3W\b/i,
-            /スリー\s*ウッド/,
-            /サン\s*ウッド/,
-          ],
-        },
-        {
-          id: "5w",
-          patterns: [
-            /5\s*ウッド/,
-            /\b5W\b/i,
-            /ファイブ\s*ウッド/,
-            /ゴ\s*ウッド/,
-          ],
-        },
-        {
-          id: "u4",
-          patterns: [
-            /4\s*ユーティリ/,
-            /\bU4\b/i,
-            /ユーティリティ.*4/,
-            /4\s*ユーテ/,
-          ],
-        },
-        {
-          id: "u5",
-          patterns: [
-            /5\s*ユーティリ/,
-            /\bU5\b/i,
-            /ユーティリティ.*5/,
-            /5\s*ユーテ/,
-          ],
-        },
-        {
-          id: "5i",
-          patterns: [
-            /5\s*アイアン/,
-            /\b5I\b/i,
-            /ファイブ\s*アイアン/,
-            /ゴ\s*ばん/,
-          ],
-        },
-        {
-          id: "6i",
-          patterns: [
-            /6\s*アイアン/,
-            /\b6I\b/i,
-            /シックス\s*アイアン/,
-            /ロク\s*ばん/,
-          ],
-        },
-        {
-          id: "7i",
-          patterns: [
-            /7\s*アイアン/,
-            /\b7I\b/i,
-            /セブン\s*アイアン/,
-            /ナナ\s*ばん/,
-          ],
-        },
-        {
-          id: "8i",
-          patterns: [
-            /8\s*アイアン/,
-            /\b8I\b/i,
-            /エイト\s*アイアン/,
-            /ハチ\s*ばん/,
-          ],
-        },
-        {
-          id: "9i",
-          patterns: [
-            /9\s*アイアン/,
-            /\b9I\b/i,
-            /ナイン\s*アイアン/,
-            /キュウ\s*ばん/,
-          ],
-        },
+        { id: "3w", patterns: [/3\s*ウッド/, /\b3W\b/i, /スリー\s*ウッド/, /サン\s*ウッド/] },
+        { id: "5w", patterns: [/5\s*ウッド/, /\b5W\b/i, /ファイブ\s*ウッド/, /ゴ\s*ウッド/] },
+        { id: "u4", patterns: [/4\s*ユーティリ/, /\bU4\b/i, /ユーティリティ.*4/, /4\s*ユーテ/] },
+        { id: "u5", patterns: [/5\s*ユーティリ/, /\bU5\b/i, /ユーティリティ.*5/, /5\s*ユーテ/] },
+        { id: "5i", patterns: [/5\s*アイアン/, /\b5I\b/i, /ファイブ\s*アイアン/, /ゴ\s*ばん/, /[ゴご]\s*番\s*アイアン/] },
+        { id: "6i", patterns: [/6\s*アイアン/, /\b6I\b/i, /シックス\s*アイアン/, /ロク\s*ばん/, /[ロろ][クく]?\s*番\s*アイアン/] },
+        { id: "7i", patterns: [/7\s*アイアン/, /\b7I\b/i, /セブン\s*アイアン/, /ナナ\s*ばん/, /[ナな][ナな]\s*番\s*アイアン/, /[シし][チち]\s*番\s*アイアン/] },
+        { id: "8i", patterns: [/8\s*アイアン/, /\b8I\b/i, /エイト\s*アイアン/, /ハチ\s*ばん/, /[ハは][チち]\s*番\s*アイアン/] },
+        { id: "9i", patterns: [/9\s*アイアン/, /\b9I\b/i, /ナイン\s*アイアン/, /キュウ\s*ばん/, /[キき][ュゅ][ウう]?\s*番\s*アイアン/, /[クく]\s*番\s*アイアン/] },
         { id: "pw", patterns: [/ピッチング/, /\bPW\b/i, /ピー\s*ダブリュー/] },
-        {
-          id: "aw",
-          patterns: [
-            /アプローチ\s*ウェッジ/,
-            /\bAW\b/i,
-            /エー\s*ダブリュー/,
-            /ギャップ/,
-          ],
-        },
+        { id: "aw", patterns: [/アプローチ\s*ウェッジ/, /\bAW\b/i, /エー\s*ダブリュー/, /ギャップ/] },
         { id: "sw", patterns: [/サンド/, /\bSW\b/i, /エス\s*ダブリュー/] },
         { id: "pt", patterns: [/パター/, /\bPT\b/i, /ピーティー/] },
       ];
@@ -3000,18 +2929,7 @@ function ShotEditor({
         { id: "fw", patterns: [/フェアウェイ/, /フェアウェー/, /\bFW\b/i] },
         { id: "rough", patterns: [/ラフ/] },
         { id: "bunker", patterns: [/バンカー/, /砂/] },
-        {
-          id: "green",
-          patterns: [
-            /グリーン.*オン/,
-            /^オン$/,
-            /グリーン乗/,
-            /(?<![\w])オン(?![\w])/,
-            /乗った/,
-            /グリーン$/,
-            /グリーンに/,
-          ],
-        },
+        { id: "green", patterns: [/グリーン.*オン/, /^オン$/, /グリーン乗/, /(?<![\w])オン(?![\w])/, /乗った/, /グリーン$/, /グリーンに/] },
         { id: "tee", patterns: [/ティー(?!アップ)/] },
         { id: "pond", patterns: [/池/, /ウォーター/, /水/] },
       ];
@@ -3157,7 +3075,9 @@ function ShotEditor({
       // マッチした項目数を確認
       const matchedCount = Object.keys(matched).length;
       if (matchedCount === 0) {
-        setVoiceError("認識できませんでした。もう一度お試しください");
+        setVoiceError(
+          "認識できませんでした。もう一度お試しください"
+        );
         setVoiceState("error");
         setTimeout(() => {
           setVoiceState("idle");
@@ -3293,19 +3213,17 @@ function ShotEditor({
               className="voice-help-toggle"
               onClick={() => setShowVoiceHelp(!showVoiceHelp)}
             >
-              {showVoiceHelp
-                ? "▲ 認識ワード一覧を閉じる"
-                : "▼ 認識できる言葉を見る"}
+              {showVoiceHelp ? "▲ 認識ワード一覧を閉じる" : "▼ 認識できる言葉を見る"}
             </button>
             {showVoiceHelp && (
               <div className="voice-help-list">
                 <div className="voice-help-cat">
                   <div className="voice-help-cat-name">🏌 クラブ</div>
                   <div className="voice-help-words">
-                    ドライバー / 3ウッド / 5ウッド / 4ユーティリティ /
-                    5ユーティリティ / 5アイアン / 6アイアン / 7アイアン /
-                    8アイアン / 9アイアン / ピッチング / アプローチウェッジ /
-                    サンド / パター
+                    ドライバー / 3ウッド / 5ウッド / 4ユーティリティ / 5ユーティリティ
+                    / 5アイアン / 6アイアン / 7アイアン / 8アイアン / 9アイアン
+                    / ゴ番アイアン / ロク番アイアン / ナナ番アイアン / ハチ番アイアン / キュウ番アイアン
+                    / ピッチング / アプローチウェッジ / サンド / パター
                   </div>
                 </div>
                 <div className="voice-help-cat">
@@ -3319,8 +3237,8 @@ function ShotEditor({
                 <div className="voice-help-cat">
                   <div className="voice-help-cat-name">🌱 ライ（着地）</div>
                   <div className="voice-help-words">
-                    フェアウェイ / ラフ / バンカー / グリーン / オン / ティー /
-                    池 / ウォーター
+                    フェアウェイ / ラフ / バンカー / グリーン / オン / ティー
+                    / 池 / ウォーター
                   </div>
                 </div>
                 <div className="voice-help-cat">
@@ -3367,11 +3285,7 @@ function ShotEditor({
           </div>
         )}
 
-        <div
-          className={`editor-section ${
-            highlightFields.clubId ? "highlight" : ""
-          }`}
-        >
+        <div className={`editor-section ${highlightFields.clubId ? "highlight" : ""}`}>
           <div className="editor-label">クラブ</div>
           <div className="club-grid-compact">
             {grouped.map((g) => (
@@ -3395,11 +3309,7 @@ function ShotEditor({
           </div>
         </div>
 
-        <div
-          className={`editor-section ${
-            highlightFields.distance ? "highlight" : ""
-          }`}
-        >
+        <div className={`editor-section ${highlightFields.distance ? "highlight" : ""}`}>
           <div className="editor-label">飛距離</div>
           <div className="distance-display">
             <input
@@ -3429,11 +3339,7 @@ function ShotEditor({
           </div>
         </div>
 
-        <div
-          className={`editor-section two-col ${
-            highlightFields.nextLie ? "highlight" : ""
-          }`}
-        >
+        <div className={`editor-section two-col ${highlightFields.nextLie ? "highlight" : ""}`}>
           <div>
             <div className="editor-label">打つ場所（ライ）</div>
             <div className="chip-row tight">
@@ -3464,13 +3370,7 @@ function ShotEditor({
           </div>
         </div>
 
-        <div
-          className={`editor-section ${
-            highlightFields.direction || highlightFields.depth
-              ? "highlight"
-              : ""
-          }`}
-        >
+        <div className={`editor-section ${(highlightFields.direction || highlightFields.depth) ? "highlight" : ""}`}>
           <div className="editor-label">ショット</div>
           <div className="shot-tendency-grid">
             <button
@@ -3518,11 +3418,7 @@ function ShotEditor({
           </div>
         </div>
 
-        <div
-          className={`editor-section ${
-            highlightFields.selfRating ? "highlight" : ""
-          }`}
-        >
+        <div className={`editor-section ${highlightFields.selfRating ? "highlight" : ""}`}>
           <div className="editor-label">自己評価（任意）</div>
           <div className="result-row">
             {SELF_RATINGS.map((r) => (
@@ -3531,7 +3427,9 @@ function ShotEditor({
                 className={`result-btn tone-${r.tone} ${
                   selfRating === r.id ? "on" : ""
                 }`}
-                onClick={() => setSelfRating(selfRating === r.id ? null : r.id)}
+                onClick={() =>
+                  setSelfRating(selfRating === r.id ? null : r.id)
+                }
                 title={r.desc}
               >
                 {r.label}
@@ -3540,11 +3438,7 @@ function ShotEditor({
           </div>
         </div>
 
-        <div
-          className={`editor-section ${
-            highlightFields.outcome ? "highlight" : ""
-          }`}
-        >
+        <div className={`editor-section ${highlightFields.outcome ? "highlight" : ""}`}>
           <div className="editor-label">結果</div>
           <div className="outcome-row">
             {OUTCOMES.map((o) => (
@@ -3561,11 +3455,7 @@ function ShotEditor({
           </div>
         </div>
 
-        <div
-          className={`editor-section ${
-            highlightFields.isReplay ? "highlight" : ""
-          }`}
-        >
+        <div className={`editor-section ${highlightFields.isReplay ? "highlight" : ""}`}>
           <label className="replay-toggle">
             <input
               type="checkbox"
