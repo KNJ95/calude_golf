@@ -2884,9 +2884,9 @@ function ShotEditor({
         { id: "7i", patterns: [/7\s*番?\s*アイアン/, /\b7I\b/i, /セブン\s*アイアン/, /[ナな][ナな]\s*ばん/, /七\s*番?\s*[アあ][イい][アあ][ンん]/, /[ナな][ナな]\s*番?\s*[アあ][イい][アあ][ンん]/, /[シし][チち]\s*番?\s*[アあ][イい][アあ][ンん]/] },
         { id: "8i", patterns: [/8\s*番?\s*アイアン/, /\b8I\b/i, /エイト\s*アイアン/, /[ハは八][チち]\s*ばん/, /八\s*番?\s*[アあ][イい][アあ][ンん]/, /[ハは八][チち]\s*番?\s*[アあ][イい][アあ][ンん]/] },
         { id: "9i", patterns: [/9\s*番?\s*アイアン/, /\b9I\b/i, /ナイン\s*アイアン/, /[キき九][ュゅ][ウう]?\s*ばん/, /九\s*番?\s*[アあ][イい][アあ][ンん]/, /[キき][ュゅ][ウう]?\s*番?\s*[アあ][イい][アあ][ンん]/, /[クく]\s*番?\s*[アあ][イい][アあ][ンん]/] },
-        { id: "pw", patterns: [/ピッチング/, /\bPW\b/i, /ピー\s*ダブリュー/] },
-        { id: "aw", patterns: [/アプローチ\s*ウェッジ/, /\bAW\b/i, /エー\s*ダブリュー/, /ギャップ/] },
-        { id: "sw", patterns: [/サンド/, /\bSW\b/i, /エス\s*ダブリュー/] },
+        { id: "pw", patterns: [/ピッチング/, /\bPW\b/i, /ピー\s*ダブリュー/, /4[5-9]\s*度/, /4[5-9]\s*ど/] },
+        { id: "aw", patterns: [/アプローチ\s*ウェッジ/, /\bAW\b/i, /エー\s*ダブリュー/, /ギャップ/, /5[0-2]\s*度/, /5[0-2]\s*ど/] },
+        { id: "sw", patterns: [/サンド/, /\bSW\b/i, /エス\s*ダブリュー/, /5[3-8]\s*度/, /5[3-8]\s*ど/, /5[3-8]\s*°/, /6[0-2]\s*度/, /6[0-2]\s*ど/] },
         { id: "pt", patterns: [/パター/, /\bPT\b/i, /ピーティー/] },
       ];
       for (const cp of clubPatterns) {
@@ -2908,8 +2908,13 @@ function ShotEditor({
 
     // 距離（数字 + ヤード/メートルなど）
     if (!currentValues.distance) {
+      // 度数表記（56度、58°など）を距離抽出から除外
+      const distSearchText = normalized
+        .replace(/\d+\s*度/g, "")
+        .replace(/\d+\s*ど(?![くう])/g, "") // 「ど」だが「どく」「どう」の前は除外
+        .replace(/\d+\s*°/g, "");
       // 「ドライバーで220ヤード」「100m」などから抽出
-      const distMatch = normalized.match(
+      const distMatch = distSearchText.match(
         /(\d{2,3})\s*(?:ヤード|ヤー|ヤ|メートル|メーター|m|y)?/i
       );
       if (distMatch) {
@@ -3046,6 +3051,11 @@ function ShotEditor({
       setVoiceTranscript(transcript);
       setVoiceState("processing");
 
+      // マイクを即座に解放（onendが発火するが、念のため明示的にabort）
+      try {
+        recognition.abort();
+      } catch {}
+
       // 現在の値を集めて parse に渡す
       const currentValues = {
         clubId,
@@ -3100,6 +3110,10 @@ function ShotEditor({
       } else if (event.error === "network") {
         msg = "ネットワークエラー";
       }
+      // マイク解放
+      try {
+        recognition.abort();
+      } catch {}
       setVoiceError(msg);
       setVoiceState("error");
       setTimeout(() => {
@@ -3109,9 +3123,10 @@ function ShotEditor({
     };
 
     recognition.onend = () => {
-      if (voiceState === "listening") {
-        setVoiceState("idle");
-      }
+      // 確実にrefから外してGC対象にする（マイクリソース解放）
+      recognitionRef.current = null;
+      // listening状態のままなら（無音停止など）idleに戻す
+      setVoiceState((prev) => (prev === "listening" ? "idle" : prev));
     };
 
     recognitionRef.current = recognition;
@@ -3120,17 +3135,32 @@ function ShotEditor({
     } catch (e) {
       setVoiceError("音声認識を開始できませんでした");
       setVoiceState("error");
+      recognitionRef.current = null;
     }
   };
 
   const stopVoiceInput = () => {
     if (recognitionRef.current) {
       try {
-        recognitionRef.current.stop();
+        // abort()はstop()より強制的にマイクを解放する
+        recognitionRef.current.abort();
       } catch {}
+      recognitionRef.current = null;
     }
     setVoiceState("idle");
   };
+
+  // モーダルが閉じられる時 (アンマウント) に音声認識を確実に停止
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {}
+        recognitionRef.current = null;
+      }
+    };
+  }, []);
 
   // クラブ選択時は常に平均飛距離で上書き
   const handleClubSelect = (c) => {
@@ -3225,6 +3255,10 @@ function ShotEditor({
                     / 5アイアン / 6アイアン / 7アイアン / 8アイアン / 9アイアン
                     / ゴ番アイアン / ロク番アイアン / ナナ番アイアン / ハチ番アイアン / キュウ番アイアン
                     / ピッチング / アプローチウェッジ / サンド / パター
+                    <br />
+                    <strong>ウェッジは度数でもOK：</strong>
+                    <br />
+                    46〜49度→PW / 50〜52度→AW / 53〜58度→SW
                   </div>
                 </div>
                 <div className="voice-help-cat">
