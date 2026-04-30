@@ -1260,9 +1260,7 @@ function buildClubDistancePrompt(state) {
   lines.push("");
 
   const stats = computeClubStats(state);
-  const used = stats
-    .filter((s) => s.trimmed != null)
-    .sort((a, b) => (b.trimmed || 0) - (a.trimmed || 0));
+  const used = stats.filter((s) => s.trimmed != null);
   if (used.length === 0) {
     lines.push("（まだデータが蓄積されていません）");
     return lines.join("\n");
@@ -3693,7 +3691,6 @@ function DistanceTab({ usedClubs, unit, state }) {
       <div className="distance-chart">
         {usedClubs
           .filter((s) => s.trimmed != null)
-          .sort((a, b) => (b.trimmed || 0) - (a.trimmed || 0))
           .map((s) => {
             const pctTrim = ((s.trimmed || 0) / maxDist) * 100;
             const pctMin = ((s.min || 0) / maxDist) * 100;
