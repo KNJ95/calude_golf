@@ -1136,6 +1136,8 @@ function buildRoundReviewPrompt(round, clubs, unit) {
   Object.entries(byClub).forEach(([cid, shots]) => {
     const c = clubMap[cid];
     if (!c) return;
+    // パター以外のクラブのみ詳細を出力（パットは別途別セクション、専用分析を予定）
+    if (c.category === "putter") return;
     const dists = shots
       .filter((s) => s.distance != null && !isShotOffPlay(s) && !isReplay(s))
       .map((s) => s.distance);
@@ -1219,7 +1221,10 @@ function buildIssueAnalysisPrompt(state) {
   }
 
   const stats = computeClubStats(state);
-  const used = stats.filter((s) => s.n > 0);
+  // パター以外のクラブのみ対象（パターは別途専用分析を予定）
+  const used = stats.filter(
+    (s) => s.n > 0 && s.club.category !== "putter"
+  );
   if (used.length > 0) {
     lines.push("## クラブ別パフォーマンス");
     lines.push("");
@@ -1260,7 +1265,10 @@ function buildClubDistancePrompt(state) {
   lines.push("");
 
   const stats = computeClubStats(state);
-  const used = stats.filter((s) => s.trimmed != null);
+  // パター以外のクラブのみ対象（パターは別途専用分析を予定）
+  const used = stats.filter(
+    (s) => s.trimmed != null && s.club.category !== "putter"
+  );
   if (used.length === 0) {
     lines.push("（まだデータが蓄積されていません）");
     return lines.join("\n");
@@ -2751,6 +2759,67 @@ function DistanceField({ value, unit, placeholder, onChange }) {
 
 function ShotRow({ index, shot, clubs, unit, onClick }) {
   const club = clubs.find((c) => c.id === shot.clubId);
+  const isPutterShot = club?.category === "putter";
+
+  // パターの場合は専用表示
+  if (isPutterShot) {
+    const PUTT_RESULT_LABELS = {
+      in: { label: "🎯 IN", tone: "good" },
+      ok: { label: "OK", tone: "ok" },
+      short: { label: "ショート", tone: "miss" },
+      over: { label: "オーバー", tone: "miss" },
+      left: { label: "← 左外し", tone: "miss" },
+      right: { label: "右外し →", tone: "miss" },
+    };
+    const result = shot.puttResult
+      ? PUTT_RESULT_LABELS[shot.puttResult]
+      : null;
+    const slopeLabel =
+      shot.puttLineSlope === "up"
+        ? "↗登"
+        : shot.puttLineSlope === "down"
+        ? "↘下"
+        : shot.puttLineSlope === "flat"
+        ? "→平"
+        : null;
+    const curveLabel =
+      shot.puttLineCurve === "hook"
+        ? "↙フック"
+        : shot.puttLineCurve === "slice"
+        ? "↘スライス"
+        : shot.puttLineCurve === "straight"
+        ? "↑直"
+        : null;
+    return (
+      <button className="shot-row" onClick={onClick}>
+        <div className="shot-num">{index}</div>
+        <div className="shot-club">{club?.name || "PT"}</div>
+        <div className="shot-distance">
+          {shot.puttDistance != null ? (
+            <>
+              <span className="dist-num">{shot.puttDistance}</span>
+              <span className="dist-unit">m</span>
+            </>
+          ) : (
+            <span className="dist-empty">—</span>
+          )}
+        </div>
+        <div className="shot-tendency-tags">
+          {slopeLabel && <span className="tag tag-dir">{slopeLabel}</span>}
+          {curveLabel && <span className="tag tag-depth">{curveLabel}</span>}
+        </div>
+        <div className="shot-lie">—</div>
+        <div className="shot-result-cell">
+          {result && (
+            <span className={`shot-result tone-${result.tone}`}>
+              {result.label}
+            </span>
+          )}
+        </div>
+      </button>
+    );
+  }
+
   const sr = getShotSelfRating(shot);
   const oc = getShotOutcome(shot);
   const rating = SELF_RATINGS.find((r) => r.id === sr);
@@ -2841,6 +2910,27 @@ function ShotEditor({
   );
   const [isReplayShot, setIsReplayShot] = useState(!!existing?.isReplay);
   const [memo, setMemo] = useState(existing?.memo || "");
+
+  // v2.1: パター専用 state
+  const [puttDistance, setPuttDistance] = useState(
+    existing?.puttDistance ?? null
+  );
+  const [puttLineSlope, setPuttLineSlope] = useState(
+    existing?.puttLineSlope || null
+  ); // 'up' | 'flat' | 'down'
+  const [puttLineCurve, setPuttLineCurve] = useState(
+    existing?.puttLineCurve || null
+  ); // 'hook' | 'straight' | 'slice'
+  const [puttResult, setPuttResult] = useState(
+    existing?.puttResult || null
+  ); // 'in' | 'ok' | 'short' | 'over' | 'left' | 'right'
+
+  // パター専用UIを表示するかどうか
+  const isPutter = useMemo(() => {
+    if (!clubId) return false;
+    const club = clubs.find((c) => c.id === clubId);
+    return club?.category === "putter";
+  }, [clubId, clubs]);
 
   // 音声入力 state
   const [voiceState, setVoiceState] = useState("idle"); // idle|listening|processing|error
@@ -3251,7 +3341,9 @@ function ShotEditor({
       .filter((g) => g.items.length);
   }, [clubs]);
 
-  const canSave = clubId && outcome && lie;
+  const canSave = isPutter
+    ? clubId && puttResult
+    : clubId && outcome && lie;
 
   return (
     <div className="sheet-backdrop" onClick={onCancel}>
@@ -3404,6 +3496,8 @@ function ShotEditor({
           </div>
         </div>
 
+        {!isPutter && (
+          <>
         <div className={`editor-section ${highlightFields.distance ? "highlight" : ""}`}>
           <div className="editor-label">飛距離</div>
           <div className="distance-display">
@@ -3562,6 +3656,119 @@ function ShotEditor({
             </span>
           </label>
         </div>
+          </>
+        )}
+
+        {/* v2.1: パター専用UI */}
+        {isPutter && (
+          <>
+            <div className="editor-section">
+              <div className="editor-label">距離（メートル）</div>
+              <div className="distance-display">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  className="distance-input-large"
+                  value={puttDistance ?? ""}
+                  placeholder="3"
+                  step="0.5"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setPuttDistance(v === "" ? null : Number(v));
+                  }}
+                />
+                <span className="distance-unit-large">m</span>
+              </div>
+              <div className="putt-distance-shortcuts">
+                {[1, 2, 3, 5, 7, 10].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={`putt-shortcut ${
+                      puttDistance === m ? "on" : ""
+                    }`}
+                    onClick={() => setPuttDistance(m)}
+                  >
+                    {m}m
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="editor-section">
+              <div className="editor-label">ライン読み（傾斜）</div>
+              <div className="chip-row">
+                {[
+                  { id: "up", label: "↗ 登り" },
+                  { id: "flat", label: "→ 平ら" },
+                  { id: "down", label: "↘ 下り" },
+                ].map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`chip ${puttLineSlope === s.id ? "on" : ""}`}
+                    onClick={() =>
+                      setPuttLineSlope(
+                        puttLineSlope === s.id ? null : s.id
+                      )
+                    }
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="editor-section">
+              <div className="editor-label">ライン読み（曲がり）</div>
+              <div className="chip-row">
+                {[
+                  { id: "hook", label: "↙ フック（左へ）" },
+                  { id: "straight", label: "↑ ストレート" },
+                  { id: "slice", label: "↘ スライス（右へ）" },
+                ].map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`chip ${puttLineCurve === s.id ? "on" : ""}`}
+                    onClick={() =>
+                      setPuttLineCurve(
+                        puttLineCurve === s.id ? null : s.id
+                      )
+                    }
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="editor-section">
+              <div className="editor-label">結果</div>
+              <div className="putt-result-grid">
+                {[
+                  { id: "in", label: "🎯 カップイン", tone: "good" },
+                  { id: "ok", label: "OK圏内（〜30cm）", tone: "ok" },
+                  { id: "short", label: "↓ ショート", tone: "miss" },
+                  { id: "over", label: "↑ オーバー", tone: "miss" },
+                  { id: "left", label: "← 左外し", tone: "miss" },
+                  { id: "right", label: "→ 右外し", tone: "miss" },
+                ].map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    className={`chip putt-result-chip tone-${r.tone} ${
+                      puttResult === r.id ? "on" : ""
+                    }`}
+                    onClick={() => setPuttResult(r.id)}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
 
         <div className="editor-section">
           <div className="editor-label">メモ</div>
@@ -3588,18 +3795,32 @@ function ShotEditor({
               className="btn-primary"
               disabled={!canSave}
               onClick={() =>
-                onSave({
-                  clubId,
-                  distance,
-                  lie,
-                  nextLie,
-                  direction,
-                  depth,
-                  selfRating,
-                  outcome,
-                  isReplay: isReplayShot,
-                  memo,
-                })
+                onSave(
+                  isPutter
+                    ? {
+                        // パター専用フィールド
+                        clubId,
+                        puttDistance,
+                        puttLineSlope,
+                        puttLineCurve,
+                        puttResult,
+                        memo,
+                        // outcome は in_play 固定（パターはin/outをputtResultで管理）
+                        outcome: "in_play",
+                      }
+                    : {
+                        clubId,
+                        distance,
+                        lie,
+                        nextLie,
+                        direction,
+                        depth,
+                        selfRating,
+                        outcome,
+                        isReplay: isReplayShot,
+                        memo,
+                      }
+                )
               }
             >
               <Check size={16} /> 保存
@@ -3627,7 +3848,10 @@ function EmptyAnalytics() {
 function AnalyticsView({ state, onBack }) {
   const [tab, setTab] = useState("distance");
   const stats = useMemo(() => computeClubStats(state), [state]);
-  const usedClubs = stats.filter((s) => s.n > 0);
+  // 分析対象はパター以外のクラブのみ（パターは別途専用分析を予定）
+  const usedClubs = stats.filter(
+    (s) => s.n > 0 && s.club.category !== "putter"
+  );
 
   return (
     <div className="screen">
@@ -5214,6 +5438,56 @@ function Style() {
         border-color: var(--green); font-weight: 600;
       }
       .lie-chip { padding: 10px 12px; font-size: 13px; min-height: 40px; }
+
+      /* v2.1: パター専用UI */
+      .putt-distance-shortcuts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+      }
+      .putt-shortcut {
+        flex: 1;
+        min-width: 50px;
+        padding: 8px 10px;
+        background: var(--bg-2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text-dim);
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .putt-shortcut.on {
+        background: var(--green);
+        color: #0a0a0a;
+        border-color: var(--green);
+      }
+      .putt-result-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+      }
+      .putt-result-chip {
+        text-align: center;
+        padding: 12px 8px;
+        font-size: 13px;
+        border-radius: 10px;
+      }
+      .putt-result-chip.tone-good.on {
+        background: var(--green);
+        color: #0a0a0a;
+        border-color: var(--green);
+      }
+      .putt-result-chip.tone-ok.on {
+        background: var(--tone-ok, #5eb8ff);
+        color: #0a0a0a;
+        border-color: var(--tone-ok, #5eb8ff);
+      }
+      .putt-result-chip.tone-miss.on {
+        background: var(--amber, #ffb84d);
+        color: #0a0a0a;
+        border-color: var(--amber, #ffb84d);
+      }
 
       /* SHEET ACTIONS */
       .sheet-actions {
