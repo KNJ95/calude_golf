@@ -1041,6 +1041,7 @@ const OUTCOME_LABELS = {
 const DIR_LABELS = { left: "左", straight: "直", right: "右" };
 const DEPTH_LABELS = { short: "ショート", pin: "ピン", over: "オーバー" };
 
+
 // ============================================================
 //  KPI / AI PROMPTS
 // ============================================================
@@ -1140,7 +1141,9 @@ function buildRoundReviewPrompt(round, clubs, unit) {
       .map((s) => s.distance);
     const dirs = shots.filter((s) => s.direction);
     const depths = shots.filter((s) => s.depth);
-    const miss = shots.filter((s) => isMissShot(s)).length;
+    const miss = shots.filter((s) =>
+      isMissShot(s)
+    ).length;
     const parts = [`${shots.length}回`];
     if (dists.length)
       parts.push(
@@ -1257,9 +1260,7 @@ function buildClubDistancePrompt(state) {
   lines.push("");
 
   const stats = computeClubStats(state);
-  const used = stats
-    .filter((s) => s.trimmed != null)
-    .sort((a, b) => (b.trimmed || 0) - (a.trimmed || 0));
+  const used = stats.filter((s) => s.trimmed != null);
   if (used.length === 0) {
     lines.push("（まだデータが蓄積されていません）");
     return lines.join("\n");
@@ -1324,7 +1325,9 @@ function computeClubStats(state) {
   return state.clubs.map((c) => {
     const data = byClub[c.id];
     const all = data.all;
-    const missCount = data.shots.filter((s) => isMissShot(s)).length;
+    const missCount = data.shots.filter((s) =>
+      isMissShot(s)
+    ).length;
     const dirShots = data.shots.filter((s) => s.direction);
     const dir = {
       left: dirShots.filter((s) => s.direction === "left").length,
@@ -1599,7 +1602,12 @@ function DeleteConfirmModal({
 // ============================================================
 //  HOME
 // ============================================================
-function HomeView({ state, setState, onOpenRound, onOpenTutorial }) {
+function HomeView({
+  state,
+  setState,
+  onOpenRound,
+  onOpenTutorial,
+}) {
   const [showNew, setShowNew] = useState(false);
 
   const totalShots = useMemo(
@@ -2865,97 +2873,17 @@ function ShotEditor({
     if (!currentValues.clubId) {
       const clubPatterns = [
         { id: "dr", patterns: [/ドライバー/, /\bDR\b/i, /ディーアール/] },
-        {
-          id: "3w",
-          patterns: [
-            /3\s*ウッド/,
-            /\b3W\b/i,
-            /スリー\s*ウッド/,
-            /サン\s*ウッド/,
-          ],
-        },
-        {
-          id: "5w",
-          patterns: [
-            /5\s*ウッド/,
-            /\b5W\b/i,
-            /ファイブ\s*ウッド/,
-            /ゴ\s*ウッド/,
-          ],
-        },
-        {
-          id: "u4",
-          patterns: [
-            /4\s*ユーティリ/,
-            /\bU4\b/i,
-            /ユーティリティ.*4/,
-            /4\s*ユーテ/,
-          ],
-        },
-        {
-          id: "u5",
-          patterns: [
-            /5\s*ユーティリ/,
-            /\bU5\b/i,
-            /ユーティリティ.*5/,
-            /5\s*ユーテ/,
-          ],
-        },
-        {
-          id: "5i",
-          patterns: [
-            /5\s*アイアン/,
-            /\b5I\b/i,
-            /ファイブ\s*アイアン/,
-            /ゴ\s*ばん/,
-          ],
-        },
-        {
-          id: "6i",
-          patterns: [
-            /6\s*アイアン/,
-            /\b6I\b/i,
-            /シックス\s*アイアン/,
-            /ロク\s*ばん/,
-          ],
-        },
-        {
-          id: "7i",
-          patterns: [
-            /7\s*アイアン/,
-            /\b7I\b/i,
-            /セブン\s*アイアン/,
-            /ナナ\s*ばん/,
-          ],
-        },
-        {
-          id: "8i",
-          patterns: [
-            /8\s*アイアン/,
-            /\b8I\b/i,
-            /エイト\s*アイアン/,
-            /ハチ\s*ばん/,
-          ],
-        },
-        {
-          id: "9i",
-          patterns: [
-            /9\s*アイアン/,
-            /\b9I\b/i,
-            /ナイン\s*アイアン/,
-            /キュウ\s*ばん/,
-          ],
-        },
+        { id: "3w", patterns: [/3\s*ウッド/, /\b3W\b/i, /スリー\s*ウッド/, /サン\s*ウッド/] },
+        { id: "5w", patterns: [/5\s*ウッド/, /\b5W\b/i, /ファイブ\s*ウッド/, /ゴ\s*ウッド/] },
+        { id: "u4", patterns: [/4\s*ユーティリ/, /\bU4\b/i, /ユーティリティ.*4/, /4\s*ユーテ/] },
+        { id: "u5", patterns: [/5\s*ユーティリ/, /\bU5\b/i, /ユーティリティ.*5/, /5\s*ユーテ/] },
+        { id: "5i", patterns: [/5\s*番?\s*アイアン/, /\b5I\b/i, /ファイブ\s*アイアン/, /[ゴご五]\s*ばん/, /[ゴご五]\s*番?\s*[アあ][イい][アあ][ンん]/] },
+        { id: "6i", patterns: [/6\s*番?\s*アイアン/, /\b6I\b/i, /シックス\s*アイアン/, /[ロろ六][クく]?\s*ばん/, /[ロろ六][クく]?\s*番?\s*[アあ][イい][アあ][ンん]/] },
+        { id: "7i", patterns: [/7\s*番?\s*アイアン/, /\b7I\b/i, /セブン\s*アイアン/, /[ナな][ナな]\s*ばん/, /七\s*番?\s*[アあ][イい][アあ][ンん]/, /[ナな][ナな]\s*番?\s*[アあ][イい][アあ][ンん]/, /[シし][チち]\s*番?\s*[アあ][イい][アあ][ンん]/] },
+        { id: "8i", patterns: [/8\s*番?\s*アイアン/, /\b8I\b/i, /エイト\s*アイアン/, /[ハは八][チち]\s*ばん/, /八\s*番?\s*[アあ][イい][アあ][ンん]/, /[ハは八][チち]\s*番?\s*[アあ][イい][アあ][ンん]/] },
+        { id: "9i", patterns: [/9\s*番?\s*アイアン/, /\b9I\b/i, /ナイン\s*アイアン/, /[キき九][ュゅ][ウう]?\s*ばん/, /九\s*番?\s*[アあ][イい][アあ][ンん]/, /[キき][ュゅ][ウう]?\s*番?\s*[アあ][イい][アあ][ンん]/, /[クく]\s*番?\s*[アあ][イい][アあ][ンん]/] },
         { id: "pw", patterns: [/ピッチング/, /\bPW\b/i, /ピー\s*ダブリュー/] },
-        {
-          id: "aw",
-          patterns: [
-            /アプローチ\s*ウェッジ/,
-            /\bAW\b/i,
-            /エー\s*ダブリュー/,
-            /ギャップ/,
-          ],
-        },
+        { id: "aw", patterns: [/アプローチ\s*ウェッジ/, /\bAW\b/i, /エー\s*ダブリュー/, /ギャップ/] },
         { id: "sw", patterns: [/サンド/, /\bSW\b/i, /エス\s*ダブリュー/] },
         { id: "pt", patterns: [/パター/, /\bPT\b/i, /ピーティー/] },
       ];
@@ -2974,12 +2902,75 @@ function ShotEditor({
           }
         }
       }
+
+      // クラブが特定できなかった場合、度数表記からユーザーのウェッジを動的選択
+      // ※ P / PW / ピッチング はこのロジックから除外（固有クラブとして扱う）
+      if (!updates.clubId) {
+        const degMatch = normalized.match(/(\d{2})\s*[度ど°]/);
+        if (degMatch) {
+          const targetLoft = parseInt(degMatch[1], 10);
+          if (targetLoft >= 40 && targetLoft <= 70) {
+            // ユーザーのクラブから度数情報を持つものを抽出
+            // 数字クラブ（"48"、"52度" 等）のみ対象、P / PW は除外
+            const candidates = clubs
+              .map((c) => {
+                // P / PW / ピッチング は度数マッピングの対象外
+                if (/^(P|PW|ピッチング)$/i.test(c.name)) {
+                  return null;
+                }
+                let loft = null;
+                // パターン1: クラブ名が "48" "52" "56" 等の数字のみ
+                if (/^\d+$/.test(c.name)) {
+                  loft = parseInt(c.name, 10);
+                }
+                // パターン2: "48度" "52°" "56 度" 等
+                if (loft === null) {
+                  const m = c.name.match(/(\d{2})\s*[度°]/);
+                  if (m) loft = parseInt(m[1], 10);
+                }
+                return loft !== null && loft >= 40 && loft <= 70
+                  ? { club: c, loft }
+                  : null;
+              })
+              .filter((x) => x !== null);
+
+            if (candidates.length > 0) {
+              // 一番近いクラブを選択（同距離なら度数が大きい方を優先）
+              let best = candidates[0];
+              let bestDiff = Math.abs(best.loft - targetLoft);
+              for (const cand of candidates) {
+                const diff = Math.abs(cand.loft - targetLoft);
+                if (
+                  diff < bestDiff ||
+                  (diff === bestDiff && cand.loft > best.loft)
+                ) {
+                  best = cand;
+                  bestDiff = diff;
+                }
+              }
+              updates.clubId = best.club.id;
+              if (
+                best.club.avgDistance != null &&
+                !currentValues.distance
+              ) {
+                updates.distance = best.club.avgDistance;
+              }
+              matched.clubId = true;
+            }
+          }
+        }
+      }
     }
 
     // 距離（数字 + ヤード/メートルなど）
     if (!currentValues.distance) {
+      // 度数表記（56度、58°など）を距離抽出から除外
+      const distSearchText = normalized
+        .replace(/\d+\s*度/g, "")
+        .replace(/\d+\s*ど(?![くう])/g, "") // 「ど」だが「どく」「どう」の前は除外
+        .replace(/\d+\s*°/g, "");
       // 「ドライバーで220ヤード」「100m」などから抽出
-      const distMatch = normalized.match(
+      const distMatch = distSearchText.match(
         /(\d{2,3})\s*(?:ヤード|ヤー|ヤ|メートル|メーター|m|y)?/i
       );
       if (distMatch) {
@@ -3000,18 +2991,7 @@ function ShotEditor({
         { id: "fw", patterns: [/フェアウェイ/, /フェアウェー/, /\bFW\b/i] },
         { id: "rough", patterns: [/ラフ/] },
         { id: "bunker", patterns: [/バンカー/, /砂/] },
-        {
-          id: "green",
-          patterns: [
-            /グリーン.*オン/,
-            /^オン$/,
-            /グリーン乗/,
-            /(?<![\w])オン(?![\w])/,
-            /乗った/,
-            /グリーン$/,
-            /グリーンに/,
-          ],
-        },
+        { id: "green", patterns: [/グリーン.*オン/, /^オン$/, /グリーン乗/, /(?<![\w])オン(?![\w])/, /乗った/, /グリーン$/, /グリーンに/] },
         { id: "tee", patterns: [/ティー(?!アップ)/] },
         { id: "pond", patterns: [/池/, /ウォーター/, /水/] },
       ];
@@ -3127,6 +3107,11 @@ function ShotEditor({
       setVoiceTranscript(transcript);
       setVoiceState("processing");
 
+      // マイクを即座に解放（onendが発火するが、念のため明示的にabort）
+      try {
+        recognition.abort();
+      } catch {}
+
       // 現在の値を集めて parse に渡す
       const currentValues = {
         clubId,
@@ -3157,7 +3142,9 @@ function ShotEditor({
       // マッチした項目数を確認
       const matchedCount = Object.keys(matched).length;
       if (matchedCount === 0) {
-        setVoiceError("認識できませんでした。もう一度お試しください");
+        setVoiceError(
+          "認識できませんでした。もう一度お試しください"
+        );
         setVoiceState("error");
         setTimeout(() => {
           setVoiceState("idle");
@@ -3179,6 +3166,10 @@ function ShotEditor({
       } else if (event.error === "network") {
         msg = "ネットワークエラー";
       }
+      // マイク解放
+      try {
+        recognition.abort();
+      } catch {}
       setVoiceError(msg);
       setVoiceState("error");
       setTimeout(() => {
@@ -3188,9 +3179,10 @@ function ShotEditor({
     };
 
     recognition.onend = () => {
-      if (voiceState === "listening") {
-        setVoiceState("idle");
-      }
+      // 確実にrefから外してGC対象にする（マイクリソース解放）
+      recognitionRef.current = null;
+      // listening状態のままなら（無音停止など）idleに戻す
+      setVoiceState((prev) => (prev === "listening" ? "idle" : prev));
     };
 
     recognitionRef.current = recognition;
@@ -3199,17 +3191,32 @@ function ShotEditor({
     } catch (e) {
       setVoiceError("音声認識を開始できませんでした");
       setVoiceState("error");
+      recognitionRef.current = null;
     }
   };
 
   const stopVoiceInput = () => {
     if (recognitionRef.current) {
       try {
-        recognitionRef.current.stop();
+        // abort()はstop()より強制的にマイクを解放する
+        recognitionRef.current.abort();
       } catch {}
+      recognitionRef.current = null;
     }
     setVoiceState("idle");
   };
+
+  // モーダルが閉じられる時 (アンマウント) に音声認識を確実に停止
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {}
+        recognitionRef.current = null;
+      }
+    };
+  }, []);
 
   // クラブ選択時は常に平均飛距離で上書き
   const handleClubSelect = (c) => {
@@ -3293,19 +3300,25 @@ function ShotEditor({
               className="voice-help-toggle"
               onClick={() => setShowVoiceHelp(!showVoiceHelp)}
             >
-              {showVoiceHelp
-                ? "▲ 認識ワード一覧を閉じる"
-                : "▼ 認識できる言葉を見る"}
+              {showVoiceHelp ? "▲ 認識ワード一覧を閉じる" : "▼ 認識できる言葉を見る"}
             </button>
             {showVoiceHelp && (
               <div className="voice-help-list">
                 <div className="voice-help-cat">
                   <div className="voice-help-cat-name">🏌 クラブ</div>
                   <div className="voice-help-words">
-                    ドライバー / 3ウッド / 5ウッド / 4ユーティリティ /
-                    5ユーティリティ / 5アイアン / 6アイアン / 7アイアン /
-                    8アイアン / 9アイアン / ピッチング / アプローチウェッジ /
-                    サンド / パター
+                    ドライバー / 3ウッド / 5ウッド / 4ユーティリティ / 5ユーティリティ
+                    / 5アイアン / 6アイアン / 7アイアン / 8アイアン / 9アイアン
+                    / ゴ番アイアン / ロク番アイアン / ナナ番アイアン / ハチ番アイアン / キュウ番アイアン
+                    / ピッチング / アプローチウェッジ / サンド / パター
+                    <br />
+                    <strong>ウェッジは度数でもOK：</strong>
+                    <br />
+                    「48度」「52度」「54度」「56度」「60度」など
+                    <br />
+                    →お持ちのクラブから一番近い度数を自動選択
+                    <br />
+                    （ピッチング/Pは度数判定の対象外、固有のクラブ）
                   </div>
                 </div>
                 <div className="voice-help-cat">
@@ -3319,8 +3332,8 @@ function ShotEditor({
                 <div className="voice-help-cat">
                   <div className="voice-help-cat-name">🌱 ライ（着地）</div>
                   <div className="voice-help-words">
-                    フェアウェイ / ラフ / バンカー / グリーン / オン / ティー /
-                    池 / ウォーター
+                    フェアウェイ / ラフ / バンカー / グリーン / オン / ティー
+                    / 池 / ウォーター
                   </div>
                 </div>
                 <div className="voice-help-cat">
@@ -3367,11 +3380,7 @@ function ShotEditor({
           </div>
         )}
 
-        <div
-          className={`editor-section ${
-            highlightFields.clubId ? "highlight" : ""
-          }`}
-        >
+        <div className={`editor-section ${highlightFields.clubId ? "highlight" : ""}`}>
           <div className="editor-label">クラブ</div>
           <div className="club-grid-compact">
             {grouped.map((g) => (
@@ -3395,11 +3404,7 @@ function ShotEditor({
           </div>
         </div>
 
-        <div
-          className={`editor-section ${
-            highlightFields.distance ? "highlight" : ""
-          }`}
-        >
+        <div className={`editor-section ${highlightFields.distance ? "highlight" : ""}`}>
           <div className="editor-label">飛距離</div>
           <div className="distance-display">
             <input
@@ -3429,13 +3434,9 @@ function ShotEditor({
           </div>
         </div>
 
-        <div
-          className={`editor-section two-col ${
-            highlightFields.nextLie ? "highlight" : ""
-          }`}
-        >
+        <div className={`editor-section two-col ${highlightFields.nextLie ? "highlight" : ""}`}>
           <div>
-            <div className="editor-label">打つ場所（ライ）</div>
+            <div className="editor-label">打点（ライ）</div>
             <div className="chip-row tight">
               {LIES.map((l) => (
                 <button
@@ -3464,13 +3465,7 @@ function ShotEditor({
           </div>
         </div>
 
-        <div
-          className={`editor-section ${
-            highlightFields.direction || highlightFields.depth
-              ? "highlight"
-              : ""
-          }`}
-        >
+        <div className={`editor-section ${(highlightFields.direction || highlightFields.depth) ? "highlight" : ""}`}>
           <div className="editor-label">ショット</div>
           <div className="shot-tendency-grid">
             <button
@@ -3518,11 +3513,7 @@ function ShotEditor({
           </div>
         </div>
 
-        <div
-          className={`editor-section ${
-            highlightFields.selfRating ? "highlight" : ""
-          }`}
-        >
+        <div className={`editor-section ${highlightFields.selfRating ? "highlight" : ""}`}>
           <div className="editor-label">自己評価（任意）</div>
           <div className="result-row">
             {SELF_RATINGS.map((r) => (
@@ -3531,7 +3522,9 @@ function ShotEditor({
                 className={`result-btn tone-${r.tone} ${
                   selfRating === r.id ? "on" : ""
                 }`}
-                onClick={() => setSelfRating(selfRating === r.id ? null : r.id)}
+                onClick={() =>
+                  setSelfRating(selfRating === r.id ? null : r.id)
+                }
                 title={r.desc}
               >
                 {r.label}
@@ -3540,11 +3533,7 @@ function ShotEditor({
           </div>
         </div>
 
-        <div
-          className={`editor-section ${
-            highlightFields.outcome ? "highlight" : ""
-          }`}
-        >
+        <div className={`editor-section ${highlightFields.outcome ? "highlight" : ""}`}>
           <div className="editor-label">結果</div>
           <div className="outcome-row">
             {OUTCOMES.map((o) => (
@@ -3561,11 +3550,7 @@ function ShotEditor({
           </div>
         </div>
 
-        <div
-          className={`editor-section ${
-            highlightFields.isReplay ? "highlight" : ""
-          }`}
-        >
+        <div className={`editor-section ${highlightFields.isReplay ? "highlight" : ""}`}>
           <label className="replay-toggle">
             <input
               type="checkbox"
@@ -3706,7 +3691,6 @@ function DistanceTab({ usedClubs, unit, state }) {
       <div className="distance-chart">
         {usedClubs
           .filter((s) => s.trimmed != null)
-          .sort((a, b) => (b.trimmed || 0) - (a.trimmed || 0))
           .map((s) => {
             const pctTrim = ((s.trimmed || 0) / maxDist) * 100;
             const pctMin = ((s.min || 0) / maxDist) * 100;
