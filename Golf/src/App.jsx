@@ -2376,16 +2376,6 @@ function RoundView({
 
   const updateHole = (patch) => updateHoleAndMaster(patch);
 
-  const addShot = (shot) => {
-    onUpdate((r) => ({
-      ...r,
-      holes: r.holes.map((h, i) =>
-        i === holeIdx
-          ? { ...h, shots: [...h.shots, { ...shot, id: uid() }] }
-          : h
-      ),
-    }));
-  };
   const updateShot = (shotId, shot) => {
     onUpdate((r) => ({
       ...r,
@@ -2554,60 +2544,48 @@ function RoundView({
               // 新規追加モード
               const puttCount = shot._puttCount || 1;
               const { _puttCount, ...firstShot } = shot;
-              if (puttCount > 1) {
-                // 複数打: 1打目は詳細あり、2打目以降は簡易レコード
-                addShot(firstShot);
-                for (let i = 2; i <= puttCount; i++) {
-                  // 残りの打は最後がカップイン、途中はOK圏内（推定）
-                  addShot({
-                    clubId: firstShot.clubId,
-                    puttDistance: null,
-                    puttLineSlope: null,
-                    puttLineCurve: null,
-                    puttResult: i === puttCount ? "in" : "ok",
-                    memo: "",
-                    outcome: "in_play",
-                  });
-                }
-                // manualPutts / manualScore を未入力時のみ自動加算
-                onUpdate((r) => ({
-                  ...r,
-                  holes: r.holes.map((h, i) => {
-                    if (i !== holeIdx) return h;
-                    const next = { ...h };
+              const isPutterShot =
+                firstShot.clubId &&
+                clubs.find((c) => c.id === firstShot.clubId)?.category ===
+                  "putter";
+
+              // ★ アトミックな1回の onUpdate で全部やる（addShot だと非同期で集計が壊れる）
+              onUpdate((r) => ({
+                ...r,
+                holes: r.holes.map((h, i) => {
+                  if (i !== holeIdx) return h;
+                  // 新規ショットを生成
+                  const newShots = [...h.shots, { ...firstShot, id: uid() }];
+                  // 複数打の場合は2打目以降を追加
+                  if (puttCount > 1) {
+                    for (let n = 2; n <= puttCount; n++) {
+                      newShots.push({
+                        id: uid(),
+                        clubId: firstShot.clubId,
+                        puttDistance: null,
+                        puttLineSlope: null,
+                        puttLineCurve: null,
+                        puttResult: n === puttCount ? "in" : "ok",
+                        memo: "",
+                        outcome: "in_play",
+                      });
+                    }
+                  }
+                  // ホールデータ更新
+                  const next = { ...h, shots: newShots };
+                  // パターの場合のみ manualPutts/manualScore を未入力時に自動加算
+                  if (isPutterShot) {
                     if (next.manualPutts === undefined) {
                       next.manualPutts = puttCount;
                     }
                     if (next.manualScore === undefined) {
-                      // 既存のショット数 + 今回追加分
-                      next.manualScore = (h.shots?.length || 0) + puttCount;
+                      // 新しいショット総数を採用
+                      next.manualScore = newShots.length;
                     }
-                    return next;
-                  }),
-                }));
-              } else {
-                // 1打のみ: 通常の追加 + manualPutts自動加算（未入力時のみ）
-                addShot(firstShot);
-                if (firstShot.clubId) {
-                  const club = clubs.find((c) => c.id === firstShot.clubId);
-                  if (club?.category === "putter") {
-                    onUpdate((r) => ({
-                      ...r,
-                      holes: r.holes.map((h, i) => {
-                        if (i !== holeIdx) return h;
-                        const next = { ...h };
-                        if (next.manualPutts === undefined) {
-                          next.manualPutts = 1;
-                        }
-                        if (next.manualScore === undefined) {
-                          next.manualScore = (h.shots?.length || 0) + 1;
-                        }
-                        return next;
-                      }),
-                    }));
                   }
-                }
-              }
+                  return next;
+                }),
+              }));
             }
             setShotEditor(null);
           }}
