@@ -2884,9 +2884,9 @@ function ShotEditor({
         { id: "7i", patterns: [/7\s*番?\s*アイアン/, /\b7I\b/i, /セブン\s*アイアン/, /[ナな][ナな]\s*ばん/, /七\s*番?\s*[アあ][イい][アあ][ンん]/, /[ナな][ナな]\s*番?\s*[アあ][イい][アあ][ンん]/, /[シし][チち]\s*番?\s*[アあ][イい][アあ][ンん]/] },
         { id: "8i", patterns: [/8\s*番?\s*アイアン/, /\b8I\b/i, /エイト\s*アイアン/, /[ハは八][チち]\s*ばん/, /八\s*番?\s*[アあ][イい][アあ][ンん]/, /[ハは八][チち]\s*番?\s*[アあ][イい][アあ][ンん]/] },
         { id: "9i", patterns: [/9\s*番?\s*アイアン/, /\b9I\b/i, /ナイン\s*アイアン/, /[キき九][ュゅ][ウう]?\s*ばん/, /九\s*番?\s*[アあ][イい][アあ][ンん]/, /[キき][ュゅ][ウう]?\s*番?\s*[アあ][イい][アあ][ンん]/, /[クく]\s*番?\s*[アあ][イい][アあ][ンん]/] },
-        { id: "pw", patterns: [/ピッチング/, /\bPW\b/i, /ピー\s*ダブリュー/, /4[5-9]\s*度/, /4[5-9]\s*ど/] },
-        { id: "aw", patterns: [/アプローチ\s*ウェッジ/, /\bAW\b/i, /エー\s*ダブリュー/, /ギャップ/, /5[0-2]\s*度/, /5[0-2]\s*ど/] },
-        { id: "sw", patterns: [/サンド/, /\bSW\b/i, /エス\s*ダブリュー/, /5[3-8]\s*度/, /5[3-8]\s*ど/, /5[3-8]\s*°/, /6[0-2]\s*度/, /6[0-2]\s*ど/] },
+        { id: "pw", patterns: [/ピッチング/, /\bPW\b/i, /ピー\s*ダブリュー/] },
+        { id: "aw", patterns: [/アプローチ\s*ウェッジ/, /\bAW\b/i, /エー\s*ダブリュー/, /ギャップ/] },
+        { id: "sw", patterns: [/サンド/, /\bSW\b/i, /エス\s*ダブリュー/] },
         { id: "pt", patterns: [/パター/, /\bPT\b/i, /ピーティー/] },
       ];
       for (const cp of clubPatterns) {
@@ -2901,6 +2901,64 @@ function ShotEditor({
             }
             matched.clubId = true;
             break;
+          }
+        }
+      }
+
+      // クラブが特定できなかった場合、度数表記からユーザーのウェッジを動的選択
+      // ※ P / PW / ピッチング はこのロジックから除外（固有クラブとして扱う）
+      if (!updates.clubId) {
+        const degMatch = normalized.match(/(\d{2})\s*[度ど°]/);
+        if (degMatch) {
+          const targetLoft = parseInt(degMatch[1], 10);
+          if (targetLoft >= 40 && targetLoft <= 70) {
+            // ユーザーのクラブから度数情報を持つものを抽出
+            // 数字クラブ（"48"、"52度" 等）のみ対象、P / PW は除外
+            const candidates = clubs
+              .map((c) => {
+                // P / PW / ピッチング は度数マッピングの対象外
+                if (/^(P|PW|ピッチング)$/i.test(c.name)) {
+                  return null;
+                }
+                let loft = null;
+                // パターン1: クラブ名が "48" "52" "56" 等の数字のみ
+                if (/^\d+$/.test(c.name)) {
+                  loft = parseInt(c.name, 10);
+                }
+                // パターン2: "48度" "52°" "56 度" 等
+                if (loft === null) {
+                  const m = c.name.match(/(\d{2})\s*[度°]/);
+                  if (m) loft = parseInt(m[1], 10);
+                }
+                return loft !== null && loft >= 40 && loft <= 70
+                  ? { club: c, loft }
+                  : null;
+              })
+              .filter((x) => x !== null);
+
+            if (candidates.length > 0) {
+              // 一番近いクラブを選択（同距離なら度数が大きい方を優先）
+              let best = candidates[0];
+              let bestDiff = Math.abs(best.loft - targetLoft);
+              for (const cand of candidates) {
+                const diff = Math.abs(cand.loft - targetLoft);
+                if (
+                  diff < bestDiff ||
+                  (diff === bestDiff && cand.loft > best.loft)
+                ) {
+                  best = cand;
+                  bestDiff = diff;
+                }
+              }
+              updates.clubId = best.club.id;
+              if (
+                best.club.avgDistance != null &&
+                !currentValues.distance
+              ) {
+                updates.distance = best.club.avgDistance;
+              }
+              matched.clubId = true;
+            }
           }
         }
       }
@@ -3258,7 +3316,11 @@ function ShotEditor({
                     <br />
                     <strong>ウェッジは度数でもOK：</strong>
                     <br />
-                    46〜49度→PW / 50〜52度→AW / 53〜58度→SW
+                    「48度」「52度」「54度」「56度」「60度」など
+                    <br />
+                    →お持ちのクラブから一番近い度数を自動選択
+                    <br />
+                    （ピッチング/Pは度数判定の対象外、固有のクラブ）
                   </div>
                 </div>
                 <div className="voice-help-cat">
