@@ -4984,6 +4984,8 @@ function Style() {
         overscroll-behavior: none;
         -webkit-text-size-adjust: 100%; /* iOS横向き時の自動拡大防止 */
         -webkit-font-smoothing: antialiased;
+        /* v2.1: 全体的な左右はみ出し防止 */
+        overflow-x: hidden;
       }
       input, textarea, select {
         font-size: 16px !important; /* iOS Safari がフォーカス時に16未満だと自動ズームする */
@@ -4996,6 +4998,10 @@ function Style() {
         display: flex;
         justify-content: center;
         padding: 0;
+        /* v2.1: iPhone Pro Max のノッチ/ダイナミックアイランド左右安全領域に対応 */
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+        box-sizing: border-box;
       }
       .phone-frame {
         width: 100%;
@@ -5004,6 +5010,8 @@ function Style() {
         min-height: 100dvh;
         background: var(--bg-0);
         position: relative;
+        /* v2.1: 内部要素がはみ出さないように */
+        overflow-x: hidden;
       }
       /* iPad など大画面では中央寄せでフレーム表示 */
       @media (min-width: 600px) {
@@ -5019,7 +5027,17 @@ function Style() {
         padding-bottom: calc(110px + env(safe-area-inset-bottom));
       }
 
-      button { cursor: pointer; font-family: inherit; border: none; background: none; color: inherit; padding: 0; }
+      button {
+        cursor: pointer;
+        font-family: inherit;
+        border: none;
+        background: none;
+        color: inherit;
+        padding: 0;
+        /* v2.1: タップ判定の堅牢化 */
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
       input[type="number"]::-webkit-outer-spin-button,
       input[type="number"]::-webkit-inner-spin-button {
         -webkit-appearance: none; margin: 0;
@@ -5240,7 +5258,7 @@ function Style() {
         backdrop-filter: blur(16px);
         border-top: 1px solid var(--border-soft);
         display: flex; justify-content: space-around;
-        padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+        padding: 8px env(safe-area-inset-right) calc(8px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
         z-index: 15; /* 通常UI（topbar:5 等）より上、モーダル(20)・チュートリアル(100)より下 */
       }
       @media (min-width: 600px) {
@@ -5267,7 +5285,7 @@ function Style() {
         width: 100%; max-width: 480px;
         background: var(--bg-1);
         border-radius: 18px 18px 0 0;
-        padding: 12px 16px calc(20px + env(safe-area-inset-bottom));
+        padding: 12px calc(16px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
         max-height: 92vh;
         max-height: 92dvh;
         overflow-y: auto;
