@@ -2472,6 +2472,7 @@ function RoundView({
                 clubs={clubs}
                 unit={unit}
                 onClick={() => setShotEditor({ mode: "edit", shotId: s.id })}
+                onDelete={() => deleteShot(s.id)}
               />
             ))}
           </div>
@@ -2796,7 +2797,115 @@ function DistanceField({ value, unit, placeholder, onChange }) {
   );
 }
 
-function ShotRow({ index, shot, clubs, unit, onClick }) {
+function ShotRow({ index, shot, clubs, unit, onClick, onDelete }) {
+  // v2.1: 左スワイプで削除ボタン表示
+  const [translateX, setTranslateX] = useState(0);
+  const [showDelete, setShowDelete] = useState(false);
+  const startXRef = useRef(0);
+  const currentXRef = useRef(0);
+  const draggingRef = useRef(false);
+  const movedRef = useRef(false);
+
+  const SWIPE_THRESHOLD = 60; // この距離以上スワイプで削除ボタン表示
+  const DELETE_BTN_WIDTH = 80;
+
+  const handleTouchStart = (e) => {
+    startXRef.current = e.touches[0].clientX;
+    currentXRef.current = e.touches[0].clientX;
+    draggingRef.current = true;
+    movedRef.current = false;
+  };
+
+  const handleTouchMove = (e) => {
+    if (!draggingRef.current) return;
+    const x = e.touches[0].clientX;
+    currentXRef.current = x;
+    const diff = x - startXRef.current;
+    if (Math.abs(diff) > 5) movedRef.current = true;
+    // 左方向のみ反応（diff < 0）
+    if (diff < 0) {
+      setTranslateX(Math.max(diff, -DELETE_BTN_WIDTH));
+    } else if (showDelete) {
+      // 削除ボタン表示中の右スワイプは閉じる方向
+      setTranslateX(Math.min(0, -DELETE_BTN_WIDTH + diff));
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    const diff = currentXRef.current - startXRef.current;
+    if (diff < -SWIPE_THRESHOLD) {
+      // 左に十分スワイプ → 削除ボタン表示
+      setTranslateX(-DELETE_BTN_WIDTH);
+      setShowDelete(true);
+    } else {
+      // 戻す
+      setTranslateX(0);
+      setShowDelete(false);
+    }
+  };
+
+  const handleClick = (e) => {
+    // スワイプ中・スワイプ後のクリックは無視
+    if (movedRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      movedRef.current = false;
+      return;
+    }
+    // 削除ボタンが表示中なら、行クリックは閉じるだけ
+    if (showDelete) {
+      e.preventDefault();
+      e.stopPropagation();
+      setTranslateX(0);
+      setShowDelete(false);
+      return;
+    }
+    onClick();
+  };
+
+  const handleDeleteClick = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (onDelete) onDelete();
+    setTranslateX(0);
+    setShowDelete(false);
+  };
+
+  return (
+    <div className="shot-row-swipe-wrap">
+      <div
+        className="shot-row-delete-action"
+        onClick={handleDeleteClick}
+        style={{ width: `${DELETE_BTN_WIDTH}px` }}
+      >
+        <Trash2 size={20} />
+        <span className="shot-row-delete-label">削除</span>
+      </div>
+      <div
+        className="shot-row-swipe-content"
+        style={{
+          transform: `translateX(${translateX}px)`,
+          transition: draggingRef.current ? "none" : "transform 0.2s ease-out",
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <ShotRowInner
+          index={index}
+          shot={shot}
+          clubs={clubs}
+          unit={unit}
+          onClick={handleClick}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ShotRowInner({ index, shot, clubs, unit, onClick }) {
   const club = clubs.find((c) => c.id === shot.clubId);
   const isPutterShot = club?.category === "putter";
 
@@ -5745,6 +5854,38 @@ function Style() {
       .empty-shots-text { font-size: 12px; color: var(--text-faint); }
 
       .shot-list { display: flex; flex-direction: column; gap: 6px; }
+
+      /* v2.1: スワイプ削除 */
+      .shot-row-swipe-wrap {
+        position: relative;
+        overflow: hidden;
+        border-radius: 10px;
+      }
+      .shot-row-delete-action {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        background: var(--red, #ff6b6b);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 2px;
+        cursor: pointer;
+        font-weight: 700;
+      }
+      .shot-row-delete-label {
+        font-size: 11px;
+      }
+      .shot-row-swipe-content {
+        position: relative;
+        z-index: 1;
+        will-change: transform;
+        background: var(--bg-1);
+        border-radius: 10px;
+      }
       .shot-row {
         display: grid;
         grid-template-columns: 28px 50px 70px 1fr 56px 36px;
@@ -5755,6 +5896,7 @@ function Style() {
         border-radius: 10px;
         border: 1px solid var(--border-soft);
         text-align: left;
+        width: 100%;
       }
       .shot-num {
         font-family: 'JetBrains Mono', monospace;
