@@ -5730,7 +5730,7 @@ function Style() {
         -webkit-backdrop-filter: blur(12px);
         backdrop-filter: blur(12px);
         border-top: 1px solid var(--border-soft);
-        padding: 8px 12px;
+        padding: 10px 14px;
         z-index: 7;
       }
       @media (min-width: 600px) {
@@ -5739,12 +5739,12 @@ function Style() {
       .score-input-bar-row {
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 7px;
         flex-wrap: nowrap;
         justify-content: center;
       }
       .score-input-bar-label {
-        font-size: 11px;
+        font-size: 13px;
         color: var(--text-faint);
         font-weight: 600;
         text-transform: uppercase;
@@ -5752,16 +5752,16 @@ function Style() {
       }
       .score-input-bar-divider {
         width: 1px;
-        height: 20px;
+        height: 24px;
         background: var(--border-soft);
         margin: 0 4px;
       }
       .score-diff {
         font-family: 'JetBrains Mono', monospace;
-        font-size: 11px;
+        font-size: 13px;
         font-weight: 700;
-        padding: 2px 6px;
-        border-radius: 4px;
+        padding: 3px 7px;
+        border-radius: 5px;
         margin-left: 2px;
       }
       .score-diff.tone-great {
@@ -5798,9 +5798,9 @@ function Style() {
         opacity: 0.3;
       }
       .score-step-btn.small {
-        width: 30px;
-        height: 30px;
-        font-size: 16px;
+        width: 36px;
+        height: 36px;
+        font-size: 19px;
       }
       .score-input-num {
         flex: 0 0 auto;
@@ -5814,9 +5814,9 @@ function Style() {
         outline: none;
       }
       .score-input-num.small {
-        width: 44px;
-        height: 30px;
-        font-size: 15px;
+        width: 53px;
+        height: 36px;
+        font-size: 18px;
         padding: 0;
       }
       .score-input-num:focus {
@@ -5826,8 +5826,8 @@ function Style() {
       .fab {
         position: fixed;
         right: 18px;
-        /* hole-nav (64px) + score-input-bar (約50px) + 18px margin */
-        bottom: calc(132px + env(safe-area-inset-bottom));
+        /* hole-nav (64px) + score-input-bar (約60px、20%拡大後) + 18px margin */
+        bottom: calc(142px + env(safe-area-inset-bottom));
         width: 56px; height: 56px;
         background: var(--green); color: #0a0a0a;
         border-radius: 50%;
@@ -5838,7 +5838,7 @@ function Style() {
       /* ショット一覧の下部にスコアバー＋hole-nav分の余白 */
       .round-screen .shot-list,
       .round-screen .empty-shots {
-        padding-bottom: 130px;
+        padding-bottom: 140px;
       }
       .hole-nav {
         position: fixed;
@@ -7417,7 +7417,7 @@ function Style() {
       .app.in-csb .bottom-nav { bottom: 42px; }
       .app.in-csb .hole-nav { bottom: calc(42px + env(safe-area-inset-bottom)); }
       .app.in-csb .score-input-bar { bottom: calc(64px + 42px + env(safe-area-inset-bottom)); }
-      .app.in-csb .fab { bottom: calc(132px + 42px + env(safe-area-inset-bottom)); }
+      .app.in-csb .fab { bottom: calc(142px + 42px + env(safe-area-inset-bottom)); }
 
       /* Standalone (本番Safari/Chrome、PWA含む) はそのままbottom指定が効く */
     `}</style>
