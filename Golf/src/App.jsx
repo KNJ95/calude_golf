@@ -2705,7 +2705,7 @@ function HoleScoreInput({ hole, onChange }) {
   return (
     <div className="score-input-bar">
       <div className="score-input-bar-row">
-        <span className="score-input-bar-label">スコア</span>
+        <span className="score-input-bar-label">S</span>
         <button
           className="score-step-btn small"
           onClick={() => setScore((score || par) - 1)}
@@ -2733,7 +2733,7 @@ function HoleScoreInput({ hole, onChange }) {
 
         <span className="score-input-bar-divider" />
 
-        <span className="score-input-bar-label">パット</span>
+        <span className="score-input-bar-label">P</span>
         <button
           className="score-step-btn small"
           onClick={() => setPutts(Math.max(0, (putts ?? 0) - 1))}
@@ -5856,11 +5856,12 @@ function Style() {
         justify-content: center;
       }
       .score-input-bar-label {
-        font-size: 13px;
+        font-size: 16px;
         color: var(--text-faint);
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        font-weight: 700;
+        letter-spacing: 0;
+        min-width: 14px;
+        text-align: center;
       }
       .score-input-bar-divider {
         width: 1px;
