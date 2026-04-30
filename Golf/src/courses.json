@@ -2,17 +2,105 @@
   {
     "venue": "札幌北広島ゴルフ倶楽部【PGM】",
     "course": "西OUT",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 375
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 355
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 182
+      },
+      {
+        "number": 4,
+        "par": 5,
+        "distance": 482
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 383
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 585
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 198
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 398
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 361
+      }
+    ]
+  },
+  {
+    "venue": "札幌北広島ゴルフ倶楽部【PGM】",
+    "course": "西OUT",
     "tee": "White",
     "holes": [
-      { "number": 1, "par": 4, "distance": 375 },
-      { "number": 2, "par": 4, "distance": 303 },
-      { "number": 3, "par": 3, "distance": 155 },
-      { "number": 4, "par": 5, "distance": 465 },
-      { "number": 5, "par": 4, "distance": 350 },
-      { "number": 6, "par": 5, "distance": 556 },
-      { "number": 7, "par": 3, "distance": 172 },
-      { "number": 8, "par": 4, "distance": 380 },
-      { "number": 9, "par": 4, "distance": 338 }
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 375
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 303
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 155
+      },
+      {
+        "number": 4,
+        "par": 5,
+        "distance": 465
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 350
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 556
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 172
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 380
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 338
+      }
     ]
   },
   {
@@ -20,15 +108,103 @@
     "course": "西OUT",
     "tee": "Red",
     "holes": [
-      { "number": 1, "par": 4, "distance": 272 },
-      { "number": 2, "par": 4, "distance": 258 },
-      { "number": 3, "par": 3, "distance": 92 },
-      { "number": 4, "par": 5, "distance": 384 },
-      { "number": 5, "par": 4, "distance": 295 },
-      { "number": 6, "par": 5, "distance": 469 },
-      { "number": 7, "par": 3, "distance": 141 },
-      { "number": 8, "par": 4, "distance": 276 },
-      { "number": 9, "par": 4, "distance": 195 }
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 272
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 258
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 92
+      },
+      {
+        "number": 4,
+        "par": 5,
+        "distance": 384
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 295
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 469
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 141
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 276
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 195
+      }
+    ]
+  },
+  {
+    "venue": "札幌北広島ゴルフ倶楽部【PGM】",
+    "course": "西IN",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 523
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 435
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 406
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 428
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 182
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 361
+      },
+      {
+        "number": 7,
+        "par": 5,
+        "distance": 500
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 180
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 389
+      }
     ]
   },
   {
@@ -36,15 +212,51 @@
     "course": "西IN",
     "tee": "White",
     "holes": [
-      { "number": 1, "par": 5, "distance": 512 },
-      { "number": 2, "par": 4, "distance": 401 },
-      { "number": 3, "par": 4, "distance": 389 },
-      { "number": 4, "par": 4, "distance": 407 },
-      { "number": 5, "par": 3, "distance": 166 },
-      { "number": 6, "par": 4, "distance": 336 },
-      { "number": 7, "par": 5, "distance": 475 },
-      { "number": 8, "par": 3, "distance": 157 },
-      { "number": 9, "par": 4, "distance": 361 }
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 512
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 401
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 389
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 407
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 166
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 336
+      },
+      {
+        "number": 7,
+        "par": 5,
+        "distance": 475
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 157
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 361
+      }
     ]
   },
   {
@@ -52,15 +264,571 @@
     "course": "西IN",
     "tee": "Red",
     "holes": [
-      { "number": 1, "par": 5, "distance": 355 },
-      { "number": 2, "par": 4, "distance": 350 },
-      { "number": 3, "par": 4, "distance": 357 },
-      { "number": 4, "par": 4, "distance": 243 },
-      { "number": 5, "par": 3, "distance": 133 },
-      { "number": 6, "par": 4, "distance": 221 },
-      { "number": 7, "par": 5, "distance": 415 },
-      { "number": 8, "par": 3, "distance": 126 },
-      { "number": 9, "par": 4, "distance": 288 }
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 355
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 350
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 357
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 243
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 133
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 221
+      },
+      {
+        "number": 7,
+        "par": 5,
+        "distance": 415
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 126
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 288
+      }
+    ]
+  },
+  {
+    "venue": "サンパーク札幌ゴルフコース【PGM】",
+    "course": "東コース",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 592
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 322
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 192
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 376
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 396
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 496
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 248
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 376
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 360
+      }
+    ]
+  },
+  {
+    "venue": "サンパーク札幌ゴルフコース【PGM】",
+    "course": "東コース",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 550
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 291
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 176
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 346
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 369
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 455
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 212
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 344
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 325
+      }
+    ]
+  },
+  {
+    "venue": "サンパーク札幌ゴルフコース【PGM】",
+    "course": "東コース",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 435
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 243
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 126
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 299
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 283
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 374
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 107
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 297
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 282
+      }
+    ]
+  },
+  {
+    "venue": "サンパーク札幌ゴルフコース【PGM】",
+    "course": "南コース",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 389
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 508
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 448
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 445
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 567
+      },
+      {
+        "number": 6,
+        "par": 3,
+        "distance": 182
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 396
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 182
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 353
+      }
+    ]
+  },
+  {
+    "venue": "サンパーク札幌ゴルフコース【PGM】",
+    "course": "南コース",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 349
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 466
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 402
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 404
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 533
+      },
+      {
+        "number": 6,
+        "par": 3,
+        "distance": 163
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 367
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 152
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 314
+      }
+    ]
+  },
+  {
+    "venue": "サンパーク札幌ゴルフコース【PGM】",
+    "course": "南コース",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 318
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 362
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 297
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 287
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 408
+      },
+      {
+        "number": 6,
+        "par": 3,
+        "distance": 131
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 277
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 113
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 286
+      }
+    ]
+  },
+  {
+    "venue": "サンパーク札幌ゴルフコース【PGM】",
+    "course": "西コース",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 404
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 527
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 199
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 397
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 445
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 464
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 211
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 406
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 553
+      }
+    ]
+  },
+  {
+    "venue": "サンパーク札幌ゴルフコース【PGM】",
+    "course": "西コース",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 379
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 477
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 164
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 365
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 385
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 406
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 186
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 378
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 513
+      }
+    ]
+  },
+  {
+    "venue": "サンパーク札幌ゴルフコース【PGM】",
+    "course": "西コース",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 296
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 387
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 105
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 310
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 294
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 315
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 118
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 284
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 421
+      }
+    ]
+  },
+  {
+    "venue": "グレート札幌カントリー倶楽部【PGM】",
+    "course": "OUT",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 511
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 371
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 376
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 192
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 413
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 466
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 155
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 358
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 570
+      }
     ]
   },
   {
@@ -68,15 +836,51 @@
     "course": "OUT",
     "tee": "White",
     "holes": [
-      { "number": 1, "par": 5, "distance": 501 },
-      { "number": 2, "par": 4, "distance": 353 },
-      { "number": 3, "par": 4, "distance": 364 },
-      { "number": 4, "par": 3, "distance": 175 },
-      { "number": 5, "par": 4, "distance": 389 },
-      { "number": 6, "par": 4, "distance": 447 },
-      { "number": 7, "par": 3, "distance": 145 },
-      { "number": 8, "par": 4, "distance": 342 },
-      { "number": 9, "par": 5, "distance": 552 }
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 501
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 353
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 364
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 175
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 389
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 447
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 145
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 342
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 552
+      }
     ]
   },
   {
@@ -84,15 +888,103 @@
     "course": "OUT",
     "tee": "Red",
     "holes": [
-      { "number": 1, "par": 5, "distance": 414 },
-      { "number": 2, "par": 4, "distance": 301 },
-      { "number": 3, "par": 4, "distance": 354 },
-      { "number": 4, "par": 3, "distance": 150 },
-      { "number": 5, "par": 4, "distance": 339 },
-      { "number": 6, "par": 4, "distance": 345 },
-      { "number": 7, "par": 3, "distance": 140 },
-      { "number": 8, "par": 4, "distance": 303 },
-      { "number": 9, "par": 5, "distance": 517 }
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 414
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 301
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 354
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 150
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 339
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 345
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 140
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 303
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 517
+      }
+    ]
+  },
+  {
+    "venue": "グレート札幌カントリー倶楽部【PGM】",
+    "course": "IN",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 394
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 448
+      },
+      {
+        "number": 3,
+        "par": 5,
+        "distance": 592
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 153
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 357
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 379
+      },
+      {
+        "number": 7,
+        "par": 5,
+        "distance": 551
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 206
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 358
+      }
     ]
   },
   {
@@ -100,15 +992,51 @@
     "course": "IN",
     "tee": "White",
     "holes": [
-      { "number": 1, "par": 4, "distance": 370 },
-      { "number": 2, "par": 4, "distance": 431 },
-      { "number": 3, "par": 5, "distance": 562 },
-      { "number": 4, "par": 3, "distance": 128 },
-      { "number": 5, "par": 4, "distance": 350 },
-      { "number": 6, "par": 4, "distance": 358 },
-      { "number": 7, "par": 5, "distance": 528 },
-      { "number": 8, "par": 3, "distance": 190 },
-      { "number": 9, "par": 4, "distance": 335 }
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 370
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 431
+      },
+      {
+        "number": 3,
+        "par": 5,
+        "distance": 562
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 128
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 350
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 358
+      },
+      {
+        "number": 7,
+        "par": 5,
+        "distance": 528
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 190
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 335
+      }
     ]
   },
   {
@@ -116,15 +1044,103 @@
     "course": "IN",
     "tee": "Red",
     "holes": [
-      { "number": 1, "par": 4, "distance": 298 },
-      { "number": 2, "par": 4, "distance": 397 },
-      { "number": 3, "par": 5, "distance": 493 },
-      { "number": 4, "par": 3, "distance": 123 },
-      { "number": 5, "par": 4, "distance": 314 },
-      { "number": 6, "par": 4, "distance": 355 },
-      { "number": 7, "par": 5, "distance": 401 },
-      { "number": 8, "par": 3, "distance": 126 },
-      { "number": 9, "par": 4, "distance": 285 }
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 298
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 397
+      },
+      {
+        "number": 3,
+        "par": 5,
+        "distance": 493
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 123
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 314
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 355
+      },
+      {
+        "number": 7,
+        "par": 5,
+        "distance": 401
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 126
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 285
+      }
+    ]
+  },
+  {
+    "venue": "チサンカントリークラブ銭凾【PGM】",
+    "course": "OUT",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 368
+      },
+      {
+        "number": 2,
+        "par": 3,
+        "distance": 171
+      },
+      {
+        "number": 3,
+        "par": 5,
+        "distance": 522
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 457
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 122
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 428
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 398
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 292
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 498
+      }
     ]
   },
   {
@@ -132,15 +1148,51 @@
     "course": "OUT",
     "tee": "White",
     "holes": [
-      { "number": 1, "par": 4, "distance": 336 },
-      { "number": 2, "par": 3, "distance": 152 },
-      { "number": 3, "par": 5, "distance": 500 },
-      { "number": 4, "par": 4, "distance": 344 },
-      { "number": 5, "par": 3, "distance": 113 },
-      { "number": 6, "par": 4, "distance": 400 },
-      { "number": 7, "par": 4, "distance": 383 },
-      { "number": 8, "par": 4, "distance": 272 },
-      { "number": 9, "par": 5, "distance": 485 }
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 336
+      },
+      {
+        "number": 2,
+        "par": 3,
+        "distance": 152
+      },
+      {
+        "number": 3,
+        "par": 5,
+        "distance": 500
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 344
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 113
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 400
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 383
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 272
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 485
+      }
     ]
   },
   {
@@ -148,15 +1200,103 @@
     "course": "OUT",
     "tee": "Red",
     "holes": [
-      { "number": 1, "par": 4, "distance": 268 },
-      { "number": 2, "par": 3, "distance": 146 },
-      { "number": 3, "par": 5, "distance": 414 },
-      { "number": 4, "par": 4, "distance": 344 },
-      { "number": 5, "par": 3, "distance": 113 },
-      { "number": 6, "par": 4, "distance": 380 },
-      { "number": 7, "par": 4, "distance": 348 },
-      { "number": 8, "par": 4, "distance": 272 },
-      { "number": 9, "par": 5, "distance": 406 }
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 268
+      },
+      {
+        "number": 2,
+        "par": 3,
+        "distance": 146
+      },
+      {
+        "number": 3,
+        "par": 5,
+        "distance": 414
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 344
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 113
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 380
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 348
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 272
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 406
+      }
+    ]
+  },
+  {
+    "venue": "チサンカントリークラブ銭凾【PGM】",
+    "course": "IN",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 306
+      },
+      {
+        "number": 2,
+        "par": 3,
+        "distance": 135
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 334
+      },
+      {
+        "number": 4,
+        "par": 5,
+        "distance": 630
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 164
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 244
+      },
+      {
+        "number": 7,
+        "par": 5,
+        "distance": 501
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 432
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 361
+      }
     ]
   },
   {
@@ -164,15 +1304,51 @@
     "course": "IN",
     "tee": "White",
     "holes": [
-      { "number": 1, "par": 4, "distance": 284 },
-      { "number": 2, "par": 3, "distance": 119 },
-      { "number": 3, "par": 4, "distance": 320 },
-      { "number": 4, "par": 5, "distance": 609 },
-      { "number": 5, "par": 3, "distance": 148 },
-      { "number": 6, "par": 4, "distance": 238 },
-      { "number": 7, "par": 5, "distance": 480 },
-      { "number": 8, "par": 4, "distance": 413 },
-      { "number": 9, "par": 4, "distance": 348 }
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 284
+      },
+      {
+        "number": 2,
+        "par": 3,
+        "distance": 119
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 320
+      },
+      {
+        "number": 4,
+        "par": 5,
+        "distance": 609
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 148
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 238
+      },
+      {
+        "number": 7,
+        "par": 5,
+        "distance": 480
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 413
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 348
+      }
     ]
   },
   {
@@ -180,15 +1356,51 @@
     "course": "IN",
     "tee": "Red",
     "holes": [
-      { "number": 1, "par": 4, "distance": 270 },
-      { "number": 2, "par": 3, "distance": 95 },
-      { "number": 3, "par": 4, "distance": 288 },
-      { "number": 4, "par": 5, "distance": 530 },
-      { "number": 5, "par": 3, "distance": 131 },
-      { "number": 6, "par": 4, "distance": 238 },
-      { "number": 7, "par": 5, "distance": 385 },
-      { "number": 8, "par": 4, "distance": 327 },
-      { "number": 9, "par": 4, "distance": 283 }
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 270
+      },
+      {
+        "number": 2,
+        "par": 3,
+        "distance": 95
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 288
+      },
+      {
+        "number": 4,
+        "par": 5,
+        "distance": 530
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 131
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 238
+      },
+      {
+        "number": 7,
+        "par": 5,
+        "distance": 385
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 327
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 283
+      }
     ]
   },
   {
@@ -196,15 +1408,51 @@
     "course": "中コース",
     "tee": "White",
     "holes": [
-      { "number": 1, "par": 4, "distance": 344 },
-      { "number": 2, "par": 4, "distance": 300 },
-      { "number": 3, "par": 4, "distance": 373 },
-      { "number": 4, "par": 3, "distance": 142 },
-      { "number": 5, "par": 5, "distance": 418 },
-      { "number": 6, "par": 4, "distance": 280 },
-      { "number": 7, "par": 4, "distance": 338 },
-      { "number": 8, "par": 5, "distance": 539 },
-      { "number": 9, "par": 3, "distance": 139 }
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 344
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 300
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 373
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 142
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 418
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 280
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 338
+      },
+      {
+        "number": 8,
+        "par": 5,
+        "distance": 539
+      },
+      {
+        "number": 9,
+        "par": 3,
+        "distance": 139
+      }
     ]
   },
   {
@@ -212,15 +1460,51 @@
     "course": "中コース",
     "tee": "Red",
     "holes": [
-      { "number": 1, "par": 4, "distance": 237 },
-      { "number": 2, "par": 4, "distance": 274 },
-      { "number": 3, "par": 4, "distance": 309 },
-      { "number": 4, "par": 3, "distance": 134 },
-      { "number": 5, "par": 5, "distance": 355 },
-      { "number": 6, "par": 4, "distance": 244 },
-      { "number": 7, "par": 4, "distance": 333 },
-      { "number": 8, "par": 5, "distance": 325 },
-      { "number": 9, "par": 3, "distance": 129 }
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 237
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 274
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 309
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 134
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 355
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 244
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 333
+      },
+      {
+        "number": 8,
+        "par": 5,
+        "distance": 325
+      },
+      {
+        "number": 9,
+        "par": 3,
+        "distance": 129
+      }
     ]
   },
   {
@@ -228,15 +1512,51 @@
     "course": "西コース",
     "tee": "White",
     "holes": [
-      { "number": 1, "par": 5, "distance": 470 },
-      { "number": 2, "par": 5, "distance": 529 },
-      { "number": 3, "par": 4, "distance": 302 },
-      { "number": 4, "par": 3, "distance": 144 },
-      { "number": 5, "par": 4, "distance": 395 },
-      { "number": 6, "par": 4, "distance": 359 },
-      { "number": 7, "par": 4, "distance": 310 },
-      { "number": 8, "par": 3, "distance": 157 },
-      { "number": 9, "par": 4, "distance": 347 }
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 470
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 529
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 302
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 144
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 395
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 359
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 310
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 157
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 347
+      }
     ]
   },
   {
@@ -244,15 +1564,51 @@
     "course": "西コース",
     "tee": "Red",
     "holes": [
-      { "number": 1, "par": 5, "distance": 369 },
-      { "number": 2, "par": 5, "distance": 407 },
-      { "number": 3, "par": 4, "distance": 276 },
-      { "number": 4, "par": 3, "distance": 100 },
-      { "number": 5, "par": 4, "distance": 316 },
-      { "number": 6, "par": 4, "distance": 292 },
-      { "number": 7, "par": 4, "distance": 299 },
-      { "number": 8, "par": 3, "distance": 124 },
-      { "number": 9, "par": 4, "distance": 277 }
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 369
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 407
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 276
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 100
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 316
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 292
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 299
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 124
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 277
+      }
     ]
   },
   {
@@ -260,15 +1616,51 @@
     "course": "南コース",
     "tee": "White",
     "holes": [
-      { "number": 1, "par": 4, "distance": 330 },
-      { "number": 2, "par": 3, "distance": 173 },
-      { "number": 3, "par": 4, "distance": 394 },
-      { "number": 4, "par": 5, "distance": 488 },
-      { "number": 5, "par": 4, "distance": 355 },
-      { "number": 6, "par": 3, "distance": 164 },
-      { "number": 7, "par": 4, "distance": 309 },
-      { "number": 8, "par": 4, "distance": 401 },
-      { "number": 9, "par": 5, "distance": 519 }
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 330
+      },
+      {
+        "number": 2,
+        "par": 3,
+        "distance": 173
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 394
+      },
+      {
+        "number": 4,
+        "par": 5,
+        "distance": 488
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 355
+      },
+      {
+        "number": 6,
+        "par": 3,
+        "distance": 164
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 309
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 401
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 519
+      }
     ]
   },
   {
@@ -276,15 +1668,675 @@
     "course": "南コース",
     "tee": "Red",
     "holes": [
-      { "number": 1, "par": 4, "distance": 170 },
-      { "number": 2, "par": 3, "distance": 153 },
-      { "number": 3, "par": 4, "distance": 279 },
-      { "number": 4, "par": 5, "distance": 391 },
-      { "number": 5, "par": 4, "distance": 279 },
-      { "number": 6, "par": 3, "distance": 127 },
-      { "number": 7, "par": 4, "distance": 289 },
-      { "number": 8, "par": 4, "distance": 263 },
-      { "number": 9, "par": 5, "distance": 358 }
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 170
+      },
+      {
+        "number": 2,
+        "par": 3,
+        "distance": 153
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 279
+      },
+      {
+        "number": 4,
+        "par": 5,
+        "distance": 391
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 279
+      },
+      {
+        "number": 6,
+        "par": 3,
+        "distance": 127
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 289
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 263
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 358
+      }
+    ]
+  },
+  {
+    "venue": "新千歳カントリークラブ【PGM】",
+    "course": "ハマナスOUT",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 422
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 555
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 367
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 186
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 442
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 539
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 369
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 198
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 365
+      }
+    ]
+  },
+  {
+    "venue": "新千歳カントリークラブ【PGM】",
+    "course": "ハマナスOUT",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 394
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 510
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 342
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 162
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 401
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 490
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 341
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 173
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 339
+      }
+    ]
+  },
+  {
+    "venue": "新千歳カントリークラブ【PGM】",
+    "course": "ハマナスOUT",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 350
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 432
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 326
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 138
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 278
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 436
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 310
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 97
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 339
+      }
+    ]
+  },
+  {
+    "venue": "新千歳カントリークラブ【PGM】",
+    "course": "ハマナスIN",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 387
+      },
+      {
+        "number": 2,
+        "par": 3,
+        "distance": 182
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 379
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 437
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 508
+      },
+      {
+        "number": 6,
+        "par": 3,
+        "distance": 179
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 398
+      },
+      {
+        "number": 8,
+        "par": 5,
+        "distance": 581
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 380
+      }
+    ]
+  },
+  {
+    "venue": "新千歳カントリークラブ【PGM】",
+    "course": "ハマナスIN",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 368
+      },
+      {
+        "number": 2,
+        "par": 3,
+        "distance": 156
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 347
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 410
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 478
+      },
+      {
+        "number": 6,
+        "par": 3,
+        "distance": 160
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 331
+      },
+      {
+        "number": 8,
+        "par": 5,
+        "distance": 563
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 359
+      }
+    ]
+  },
+  {
+    "venue": "新千歳カントリークラブ【PGM】",
+    "course": "ハマナスIN",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 324
+      },
+      {
+        "number": 2,
+        "par": 3,
+        "distance": 139
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 309
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 323
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 366
+      },
+      {
+        "number": 6,
+        "par": 3,
+        "distance": 116
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 278
+      },
+      {
+        "number": 8,
+        "par": 5,
+        "distance": 497
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 313
+      }
+    ]
+  },
+  {
+    "venue": "新千歳カントリークラブ【PGM】",
+    "course": "ホロカOUT",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 404
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 498
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 171
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 414
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 376
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 555
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 393
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 184
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 383
+      }
+    ]
+  },
+  {
+    "venue": "新千歳カントリークラブ【PGM】",
+    "course": "ホロカOUT",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 376
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 471
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 153
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 395
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 347
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 523
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 332
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 165
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 367
+      }
+    ]
+  },
+  {
+    "venue": "新千歳カントリークラブ【PGM】",
+    "course": "ホロカOUT",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 303
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 447
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 105
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 345
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 291
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 492
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 283
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 114
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 282
+      }
+    ]
+  },
+  {
+    "venue": "新千歳カントリークラブ【PGM】",
+    "course": "ホロカIN",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 387
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 475
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 379
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 407
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 141
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 404
+      },
+      {
+        "number": 7,
+        "par": 5,
+        "distance": 512
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 164
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 377
+      }
+    ]
+  },
+  {
+    "venue": "新千歳カントリークラブ【PGM】",
+    "course": "ホロカIN",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 356
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 455
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 356
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 382
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 141
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 385
+      },
+      {
+        "number": 7,
+        "par": 5,
+        "distance": 492
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 142
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 357
+      }
+    ]
+  },
+  {
+    "venue": "新千歳カントリークラブ【PGM】",
+    "course": "ホロカIN",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 284
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 436
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 324
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 326
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 123
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 334
+      },
+      {
+        "number": 7,
+        "par": 5,
+        "distance": 424
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 142
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 292
+      }
     ]
   },
   {
@@ -292,15 +2344,51 @@
     "course": "大沼コース",
     "tee": "White",
     "holes": [
-      { "number": 1, "par": 4, "distance": 395 },
-      { "number": 2, "par": 4, "distance": 370 },
-      { "number": 3, "par": 3, "distance": 170 },
-      { "number": 4, "par": 4, "distance": 344 },
-      { "number": 5, "par": 5, "distance": 515 },
-      { "number": 6, "par": 4, "distance": 361 },
-      { "number": 7, "par": 4, "distance": 201 },
-      { "number": 8, "par": 5, "distance": 370 },
-      { "number": 9, "par": 4, "distance": 480 }
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 395
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 370
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 170
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 344
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 515
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 361
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 201
+      },
+      {
+        "number": 8,
+        "par": 5,
+        "distance": 370
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 480
+      }
     ]
   },
   {
@@ -308,15 +2396,51 @@
     "course": "大沼コース",
     "tee": "Red",
     "holes": [
-      { "number": 1, "par": 4, "distance": 319 },
-      { "number": 2, "par": 4, "distance": 312 },
-      { "number": 3, "par": 3, "distance": 137 },
-      { "number": 4, "par": 4, "distance": 325 },
-      { "number": 5, "par": 5, "distance": 445 },
-      { "number": 6, "par": 4, "distance": 330 },
-      { "number": 7, "par": 4, "distance": 136 },
-      { "number": 8, "par": 5, "distance": 300 },
-      { "number": 9, "par": 4, "distance": 400 }
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 319
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 312
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 137
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 325
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 445
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 330
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 136
+      },
+      {
+        "number": 8,
+        "par": 5,
+        "distance": 300
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 400
+      }
     ]
   },
   {
@@ -324,15 +2448,51 @@
     "course": "小沼コース",
     "tee": "White",
     "holes": [
-      { "number": 1, "par": 4, "distance": 410 },
-      { "number": 2, "par": 3, "distance": 170 },
-      { "number": 3, "par": 4, "distance": 396 },
-      { "number": 4, "par": 5, "distance": 528 },
-      { "number": 5, "par": 3, "distance": 150 },
-      { "number": 6, "par": 4, "distance": 340 },
-      { "number": 7, "par": 4, "distance": 392 },
-      { "number": 8, "par": 4, "distance": 385 },
-      { "number": 9, "par": 5, "distance": 600 }
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 410
+      },
+      {
+        "number": 2,
+        "par": 3,
+        "distance": 170
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 396
+      },
+      {
+        "number": 4,
+        "par": 5,
+        "distance": 528
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 150
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 340
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 392
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 385
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 600
+      }
     ]
   },
   {
@@ -340,15 +2500,51 @@
     "course": "小沼コース",
     "tee": "Red",
     "holes": [
-      { "number": 1, "par": 4, "distance": 287 },
-      { "number": 2, "par": 3, "distance": 133 },
-      { "number": 3, "par": 4, "distance": 310 },
-      { "number": 4, "par": 5, "distance": 445 },
-      { "number": 5, "par": 3, "distance": 115 },
-      { "number": 6, "par": 4, "distance": 277 },
-      { "number": 7, "par": 4, "distance": 323 },
-      { "number": 8, "par": 4, "distance": 296 },
-      { "number": 9, "par": 5, "distance": 490 }
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 287
+      },
+      {
+        "number": 2,
+        "par": 3,
+        "distance": 133
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 310
+      },
+      {
+        "number": 4,
+        "par": 5,
+        "distance": 445
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 115
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 277
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 323
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 296
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 490
+      }
     ]
   },
   {
@@ -356,15 +2552,51 @@
     "course": "駒ヶ岳コース",
     "tee": "White",
     "holes": [
-      { "number": 1, "par": 5, "distance": 564 },
-      { "number": 2, "par": 3, "distance": 162 },
-      { "number": 3, "par": 4, "distance": 347 },
-      { "number": 4, "par": 4, "distance": 344 },
-      { "number": 5, "par": 4, "distance": 387 },
-      { "number": 6, "par": 4, "distance": 390 },
-      { "number": 7, "par": 5, "distance": 471 },
-      { "number": 8, "par": 3, "distance": 150 },
-      { "number": 9, "par": 4, "distance": 326 }
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 564
+      },
+      {
+        "number": 2,
+        "par": 3,
+        "distance": 162
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 347
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 344
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 387
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 390
+      },
+      {
+        "number": 7,
+        "par": 5,
+        "distance": 471
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 150
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 326
+      }
     ]
   },
   {
@@ -372,15 +2604,1559 @@
     "course": "駒ヶ岳コース",
     "tee": "Red",
     "holes": [
-      { "number": 1, "par": 5, "distance": 398 },
-      { "number": 2, "par": 3, "distance": 100 },
-      { "number": 3, "par": 4, "distance": 319 },
-      { "number": 4, "par": 4, "distance": 289 },
-      { "number": 5, "par": 4, "distance": 300 },
-      { "number": 6, "par": 4, "distance": 299 },
-      { "number": 7, "par": 5, "distance": 431 },
-      { "number": 8, "par": 3, "distance": 134 },
-      { "number": 9, "par": 4, "distance": 272 }
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 398
+      },
+      {
+        "number": 2,
+        "par": 3,
+        "distance": 100
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 319
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 289
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 300
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 299
+      },
+      {
+        "number": 7,
+        "par": 5,
+        "distance": 431
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 134
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 272
+      }
+    ]
+  },
+  {
+    "venue": "ゴルフ5カントリー美唄コース",
+    "course": "東コース",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 384
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 511
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 374
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 330
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 583
+      },
+      {
+        "number": 6,
+        "par": 3,
+        "distance": 190
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 391
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 128
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 418
+      }
+    ]
+  },
+  {
+    "venue": "ゴルフ5カントリー美唄コース",
+    "course": "東コース",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 352
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 458
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 357
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 299
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 533
+      },
+      {
+        "number": 6,
+        "par": 3,
+        "distance": 162
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 355
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 117
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 333
+      }
+    ]
+  },
+  {
+    "venue": "ゴルフ5カントリー美唄コース",
+    "course": "東コース",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 279
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 412
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 268
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 228
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 478
+      },
+      {
+        "number": 6,
+        "par": 3,
+        "distance": 134
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 286
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 66
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 303
+      }
+    ]
+  },
+  {
+    "venue": "ゴルフ5カントリー美唄コース",
+    "course": "中コース",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 384
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 516
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 151
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 413
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 473
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 365
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 338
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 175
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 443
+      }
+    ]
+  },
+  {
+    "venue": "ゴルフ5カントリー美唄コース",
+    "course": "中コース",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 367
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 478
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 136
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 393
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 464
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 350
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 311
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 157
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 390
+      }
+    ]
+  },
+  {
+    "venue": "ゴルフ5カントリー美唄コース",
+    "course": "中コース",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 313
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 436
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 82
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 367
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 428
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 323
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 272
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 98
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 338
+      }
+    ]
+  },
+  {
+    "venue": "ゴルフ5カントリー美唄コース",
+    "course": "西コース",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 490
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 354
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 162
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 371
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 164
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 341
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 404
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 358
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 501
+      }
+    ]
+  },
+  {
+    "venue": "ゴルフ5カントリー美唄コース",
+    "course": "西コース",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 463
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 324
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 148
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 340
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 148
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 325
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 387
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 312
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 472
+      }
+    ]
+  },
+  {
+    "venue": "ゴルフ5カントリー美唄コース",
+    "course": "西コース",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 414
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 242
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 134
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 305
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 101
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 278
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 344
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 266
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 427
+      }
+    ]
+  },
+  {
+    "venue": "小樽カントリー倶楽部",
+    "course": "新コースOUT",
+    "tee": "Gold",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 448
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 407
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 500
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 185
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 425
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 535
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 190
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 407
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 567
+      }
+    ]
+  },
+  {
+    "venue": "小樽カントリー倶楽部",
+    "course": "新コースIN",
+    "tee": "Gold",
+    "holes": [
+      {
+        "number": 10,
+        "par": 5,
+        "distance": 583
+      },
+      {
+        "number": 11,
+        "par": 4,
+        "distance": 452
+      },
+      {
+        "number": 12,
+        "par": 3,
+        "distance": 222
+      },
+      {
+        "number": 13,
+        "par": 5,
+        "distance": 527
+      },
+      {
+        "number": 14,
+        "par": 4,
+        "distance": 359
+      },
+      {
+        "number": 15,
+        "par": 4,
+        "distance": 464
+      },
+      {
+        "number": 16,
+        "par": 4,
+        "distance": 504
+      },
+      {
+        "number": 17,
+        "par": 3,
+        "distance": 230
+      },
+      {
+        "number": 18,
+        "par": 4,
+        "distance": 462
+      }
+    ]
+  },
+  {
+    "venue": "小樽カントリー倶楽部",
+    "course": "新コースOUT",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 428
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 387
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 415
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 163
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 400
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 512
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 163
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 379
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 534
+      }
+    ]
+  },
+  {
+    "venue": "小樽カントリー倶楽部",
+    "course": "新コースIN",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 10,
+        "par": 5,
+        "distance": 549
+      },
+      {
+        "number": 11,
+        "par": 4,
+        "distance": 429
+      },
+      {
+        "number": 12,
+        "par": 3,
+        "distance": 194
+      },
+      {
+        "number": 13,
+        "par": 5,
+        "distance": 514
+      },
+      {
+        "number": 14,
+        "par": 4,
+        "distance": 329
+      },
+      {
+        "number": 15,
+        "par": 4,
+        "distance": 439
+      },
+      {
+        "number": 16,
+        "par": 4,
+        "distance": 486
+      },
+      {
+        "number": 17,
+        "par": 3,
+        "distance": 195
+      },
+      {
+        "number": 18,
+        "par": 4,
+        "distance": 430
+      }
+    ]
+  },
+  {
+    "venue": "小樽カントリー倶楽部",
+    "course": "新コースOUT",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 406
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 354
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 388
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 142
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 373
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 492
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 145
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 358
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 502
+      }
+    ]
+  },
+  {
+    "venue": "小樽カントリー倶楽部",
+    "course": "新コースIN",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 10,
+        "par": 5,
+        "distance": 522
+      },
+      {
+        "number": 11,
+        "par": 4,
+        "distance": 411
+      },
+      {
+        "number": 12,
+        "par": 3,
+        "distance": 178
+      },
+      {
+        "number": 13,
+        "par": 5,
+        "distance": 498
+      },
+      {
+        "number": 14,
+        "par": 4,
+        "distance": 312
+      },
+      {
+        "number": 15,
+        "par": 4,
+        "distance": 404
+      },
+      {
+        "number": 16,
+        "par": 4,
+        "distance": 462
+      },
+      {
+        "number": 17,
+        "par": 3,
+        "distance": 172
+      },
+      {
+        "number": 18,
+        "par": 4,
+        "distance": 407
+      }
+    ]
+  },
+  {
+    "venue": "小樽カントリー倶楽部",
+    "course": "新コースOUT",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 385
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 337
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 345
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 129
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 350
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 473
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 130
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 337
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 473
+      }
+    ]
+  },
+  {
+    "venue": "小樽カントリー倶楽部",
+    "course": "新コースIN",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 10,
+        "par": 5,
+        "distance": 512
+      },
+      {
+        "number": 11,
+        "par": 4,
+        "distance": 388
+      },
+      {
+        "number": 12,
+        "par": 3,
+        "distance": 161
+      },
+      {
+        "number": 13,
+        "par": 5,
+        "distance": 485
+      },
+      {
+        "number": 14,
+        "par": 4,
+        "distance": 297
+      },
+      {
+        "number": 15,
+        "par": 4,
+        "distance": 373
+      },
+      {
+        "number": 16,
+        "par": 4,
+        "distance": 447
+      },
+      {
+        "number": 17,
+        "par": 3,
+        "distance": 172
+      },
+      {
+        "number": 18,
+        "par": 4,
+        "distance": 380
+      }
+    ]
+  },
+  {
+    "venue": "エルムカントリー倶楽部",
+    "course": "西コースOUT",
+    "tee": "Gold",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 387
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 561
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 198
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 367
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 523
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 392
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 166
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 413
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 398
+      }
+    ]
+  },
+  {
+    "venue": "エルムカントリー倶楽部",
+    "course": "西コースOUT",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 372
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 528
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 179
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 353
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 499
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 374
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 151
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 383
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 370
+      }
+    ]
+  },
+  {
+    "venue": "エルムカントリー倶楽部",
+    "course": "西コースOUT",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 328
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 466
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 148
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 297
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 452
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 312
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 140
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 326
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 311
+      }
+    ]
+  },
+  {
+    "venue": "エルムカントリー倶楽部",
+    "course": "西コースIN",
+    "tee": "Gold",
+    "holes": [
+      {
+        "number": 10,
+        "par": 5,
+        "distance": 490
+      },
+      {
+        "number": 11,
+        "par": 4,
+        "distance": 406
+      },
+      {
+        "number": 12,
+        "par": 3,
+        "distance": 202
+      },
+      {
+        "number": 13,
+        "par": 4,
+        "distance": 428
+      },
+      {
+        "number": 14,
+        "par": 4,
+        "distance": 397
+      },
+      {
+        "number": 15,
+        "par": 3,
+        "distance": 191
+      },
+      {
+        "number": 16,
+        "par": 5,
+        "distance": 513
+      },
+      {
+        "number": 17,
+        "par": 4,
+        "distance": 409
+      },
+      {
+        "number": 18,
+        "par": 4,
+        "distance": 365
+      }
+    ]
+  },
+  {
+    "venue": "エルムカントリー倶楽部",
+    "course": "西コースIN",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 10,
+        "par": 5,
+        "distance": 486
+      },
+      {
+        "number": 11,
+        "par": 4,
+        "distance": 385
+      },
+      {
+        "number": 12,
+        "par": 3,
+        "distance": 170
+      },
+      {
+        "number": 13,
+        "par": 4,
+        "distance": 397
+      },
+      {
+        "number": 14,
+        "par": 4,
+        "distance": 365
+      },
+      {
+        "number": 15,
+        "par": 3,
+        "distance": 174
+      },
+      {
+        "number": 16,
+        "par": 5,
+        "distance": 481
+      },
+      {
+        "number": 17,
+        "par": 4,
+        "distance": 362
+      },
+      {
+        "number": 18,
+        "par": 4,
+        "distance": 348
+      }
+    ]
+  },
+  {
+    "venue": "エルムカントリー倶楽部",
+    "course": "西コースIN",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 10,
+        "par": 5,
+        "distance": 456
+      },
+      {
+        "number": 11,
+        "par": 4,
+        "distance": 317
+      },
+      {
+        "number": 12,
+        "par": 3,
+        "distance": 141
+      },
+      {
+        "number": 13,
+        "par": 4,
+        "distance": 338
+      },
+      {
+        "number": 14,
+        "par": 4,
+        "distance": 315
+      },
+      {
+        "number": 15,
+        "par": 3,
+        "distance": 155
+      },
+      {
+        "number": 16,
+        "par": 5,
+        "distance": 416
+      },
+      {
+        "number": 17,
+        "par": 4,
+        "distance": 321
+      },
+      {
+        "number": 18,
+        "par": 4,
+        "distance": 302
+      }
+    ]
+  },
+  {
+    "venue": "エルムカントリー倶楽部",
+    "course": "東コースOUT",
+    "tee": "Gold",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 512
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 429
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 195
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 359
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 412
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 530
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 397
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 200
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 380
+      }
+    ]
+  },
+  {
+    "venue": "エルムカントリー倶楽部",
+    "course": "東コースOUT",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 496
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 394
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 183
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 338
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 394
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 513
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 373
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 170
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 350
+      }
+    ]
+  },
+  {
+    "venue": "エルムカントリー倶楽部",
+    "course": "東コースOUT",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 437
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 357
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 126
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 298
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 319
+      },
+      {
+        "number": 6,
+        "par": 5,
+        "distance": 465
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 326
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 132
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 314
+      }
+    ]
+  },
+  {
+    "venue": "エルムカントリー倶楽部",
+    "course": "東コースIN",
+    "tee": "Gold",
+    "holes": [
+      {
+        "number": 10,
+        "par": 4,
+        "distance": 370
+      },
+      {
+        "number": 11,
+        "par": 4,
+        "distance": 405
+      },
+      {
+        "number": 12,
+        "par": 4,
+        "distance": 365
+      },
+      {
+        "number": 13,
+        "par": 3,
+        "distance": 184
+      },
+      {
+        "number": 14,
+        "par": 4,
+        "distance": 377
+      },
+      {
+        "number": 15,
+        "par": 5,
+        "distance": 570
+      },
+      {
+        "number": 16,
+        "par": 4,
+        "distance": 381
+      },
+      {
+        "number": 17,
+        "par": 3,
+        "distance": 205
+      },
+      {
+        "number": 18,
+        "par": 5,
+        "distance": 484
+      }
+    ]
+  },
+  {
+    "venue": "エルムカントリー倶楽部",
+    "course": "東コースIN",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 10,
+        "par": 4,
+        "distance": 355
+      },
+      {
+        "number": 11,
+        "par": 4,
+        "distance": 358
+      },
+      {
+        "number": 12,
+        "par": 4,
+        "distance": 335
+      },
+      {
+        "number": 13,
+        "par": 3,
+        "distance": 154
+      },
+      {
+        "number": 14,
+        "par": 4,
+        "distance": 349
+      },
+      {
+        "number": 15,
+        "par": 5,
+        "distance": 550
+      },
+      {
+        "number": 16,
+        "par": 4,
+        "distance": 330
+      },
+      {
+        "number": 17,
+        "par": 3,
+        "distance": 165
+      },
+      {
+        "number": 18,
+        "par": 5,
+        "distance": 472
+      }
+    ]
+  },
+  {
+    "venue": "エルムカントリー倶楽部",
+    "course": "東コースIN",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 10,
+        "par": 4,
+        "distance": 335
+      },
+      {
+        "number": 11,
+        "par": 4,
+        "distance": 316
+      },
+      {
+        "number": 12,
+        "par": 4,
+        "distance": 308
+      },
+      {
+        "number": 13,
+        "par": 3,
+        "distance": 109
+      },
+      {
+        "number": 14,
+        "par": 4,
+        "distance": 310
+      },
+      {
+        "number": 15,
+        "par": 5,
+        "distance": 449
+      },
+      {
+        "number": 16,
+        "par": 4,
+        "distance": 266
+      },
+      {
+        "number": 17,
+        "par": 3,
+        "distance": 121
+      },
+      {
+        "number": 18,
+        "par": 5,
+        "distance": 422
+      }
     ]
   }
 ]
