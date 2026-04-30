@@ -2546,8 +2546,69 @@ function RoundView({
             setShotEditor(null);
           }}
           onSave={(shot) => {
-            if (shotEditor.mode === "edit") updateShot(shotEditor.shotId, shot);
-            else addShot(shot);
+            if (shotEditor.mode === "edit") {
+              // 編集モード: _puttCount は無視、単一更新
+              const { _puttCount, ...shotData } = shot;
+              updateShot(shotEditor.shotId, shotData);
+            } else {
+              // 新規追加モード
+              const puttCount = shot._puttCount || 1;
+              const { _puttCount, ...firstShot } = shot;
+              if (puttCount > 1) {
+                // 複数打: 1打目は詳細あり、2打目以降は簡易レコード
+                addShot(firstShot);
+                for (let i = 2; i <= puttCount; i++) {
+                  // 残りの打は最後がカップイン、途中はOK圏内（推定）
+                  addShot({
+                    clubId: firstShot.clubId,
+                    puttDistance: null,
+                    puttLineSlope: null,
+                    puttLineCurve: null,
+                    puttResult: i === puttCount ? "in" : "ok",
+                    memo: "",
+                    outcome: "in_play",
+                  });
+                }
+                // manualPutts / manualScore を未入力時のみ自動加算
+                onUpdate((r) => ({
+                  ...r,
+                  holes: r.holes.map((h, i) => {
+                    if (i !== holeIdx) return h;
+                    const next = { ...h };
+                    if (next.manualPutts === undefined) {
+                      next.manualPutts = puttCount;
+                    }
+                    if (next.manualScore === undefined) {
+                      // 既存のショット数 + 今回追加分
+                      next.manualScore = (h.shots?.length || 0) + puttCount;
+                    }
+                    return next;
+                  }),
+                }));
+              } else {
+                // 1打のみ: 通常の追加 + manualPutts自動加算（未入力時のみ）
+                addShot(firstShot);
+                if (firstShot.clubId) {
+                  const club = clubs.find((c) => c.id === firstShot.clubId);
+                  if (club?.category === "putter") {
+                    onUpdate((r) => ({
+                      ...r,
+                      holes: r.holes.map((h, i) => {
+                        if (i !== holeIdx) return h;
+                        const next = { ...h };
+                        if (next.manualPutts === undefined) {
+                          next.manualPutts = 1;
+                        }
+                        if (next.manualScore === undefined) {
+                          next.manualScore = (h.shots?.length || 0) + 1;
+                        }
+                        return next;
+                      }),
+                    }));
+                  }
+                }
+              }
+            }
             setShotEditor(null);
           }}
         />
@@ -2924,6 +2985,8 @@ function ShotEditor({
   const [puttResult, setPuttResult] = useState(
     existing?.puttResult || null
   ); // 'in' | 'ok' | 'short' | 'over' | 'left' | 'right'
+  // v2.1: 複数打を一括記録するための打数（編集モードでは1固定、新規追加モードのみ可変）
+  const [puttCount, setPuttCount] = useState(1);
 
   // パター専用UIを表示するかどうか
   const isPutter = useMemo(() => {
@@ -3695,6 +3758,38 @@ function ShotEditor({
               </div>
             </div>
 
+            {mode !== "edit" && (
+              <div className="editor-section">
+                <div className="editor-label">
+                  打数{puttCount > 1 && (
+                    <span className="putt-count-note">
+                      （{puttCount}打分まとめて記録）
+                    </span>
+                  )}
+                </div>
+                <div className="putt-count-row">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      className={`putt-count-btn ${
+                        puttCount === n ? "on" : ""
+                      }`}
+                      onClick={() => setPuttCount(n)}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+                {puttCount > 1 && (
+                  <div className="putt-count-hint">
+                    入力した距離・ライン読みは1打目として記録、
+                    残り{puttCount - 1}打はカップインまでの簡易記録になります
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="editor-section">
               <div className="editor-label">ライン読み（傾斜）</div>
               <div className="chip-row">
@@ -3807,6 +3902,8 @@ function ShotEditor({
                         memo,
                         // outcome は in_play 固定（パターはin/outをputtResultで管理）
                         outcome: "in_play",
+                        // v2.1: 複数打を一括記録するための打数（編集モードでは無視）
+                        _puttCount: mode === "edit" ? 1 : puttCount,
                       }
                     : {
                         clubId,
@@ -5505,6 +5602,43 @@ function Style() {
         background: var(--amber, #ffb84d);
         color: #0a0a0a;
         border-color: var(--amber, #ffb84d);
+      }
+
+      /* v2.1: パター複数打セレクタ */
+      .putt-count-row {
+        display: flex;
+        gap: 8px;
+      }
+      .putt-count-btn {
+        flex: 1;
+        padding: 12px 0;
+        background: var(--bg-2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text-dim);
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .putt-count-btn.on {
+        background: var(--green);
+        color: #0a0a0a;
+        border-color: var(--green);
+      }
+      .putt-count-note {
+        margin-left: 6px;
+        font-size: 11px;
+        color: var(--green);
+        font-weight: 600;
+      }
+      .putt-count-hint {
+        margin-top: 8px;
+        padding: 8px 10px;
+        background: rgba(182, 242, 74, 0.08);
+        border: 1px solid rgba(182, 242, 74, 0.2);
+        border-radius: 6px;
+        font-size: 11px;
+        color: var(--text-dim);
+        line-height: 1.6;
       }
 
       /* SHEET ACTIONS */
