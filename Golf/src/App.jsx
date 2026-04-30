@@ -4984,6 +4984,8 @@ function Style() {
         overscroll-behavior: none;
         -webkit-text-size-adjust: 100%; /* iOS横向き時の自動拡大防止 */
         -webkit-font-smoothing: antialiased;
+        /* v2.1: 全体的な左右はみ出し防止 */
+        overflow-x: hidden;
       }
       input, textarea, select {
         font-size: 16px !important; /* iOS Safari がフォーカス時に16未満だと自動ズームする */
@@ -4996,6 +4998,10 @@ function Style() {
         display: flex;
         justify-content: center;
         padding: 0;
+        /* v2.1: iPhone Pro Max のノッチ/ダイナミックアイランド左右安全領域に対応 */
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+        box-sizing: border-box;
       }
       .phone-frame {
         width: 100%;
@@ -5004,6 +5010,8 @@ function Style() {
         min-height: 100dvh;
         background: var(--bg-0);
         position: relative;
+        /* v2.1: 内部要素がはみ出さないように */
+        overflow-x: hidden;
       }
       /* iPad など大画面では中央寄せでフレーム表示 */
       @media (min-width: 600px) {
@@ -5019,7 +5027,17 @@ function Style() {
         padding-bottom: calc(110px + env(safe-area-inset-bottom));
       }
 
-      button { cursor: pointer; font-family: inherit; border: none; background: none; color: inherit; padding: 0; }
+      button {
+        cursor: pointer;
+        font-family: inherit;
+        border: none;
+        background: none;
+        color: inherit;
+        padding: 0;
+        /* v2.1: タップ判定の堅牢化 */
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
       input[type="number"]::-webkit-outer-spin-button,
       input[type="number"]::-webkit-inner-spin-button {
         -webkit-appearance: none; margin: 0;
@@ -5240,7 +5258,7 @@ function Style() {
         backdrop-filter: blur(16px);
         border-top: 1px solid var(--border-soft);
         display: flex; justify-content: space-around;
-        padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+        padding: 8px env(safe-area-inset-right) calc(8px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
         z-index: 15; /* 通常UI（topbar:5 等）より上、モーダル(20)・チュートリアル(100)より下 */
       }
       @media (min-width: 600px) {
@@ -5267,7 +5285,7 @@ function Style() {
         width: 100%; max-width: 480px;
         background: var(--bg-1);
         border-radius: 18px 18px 0 0;
-        padding: 12px 16px calc(20px + env(safe-area-inset-bottom));
+        padding: 12px calc(16px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
         max-height: 92vh;
         max-height: 92dvh;
         overflow-y: auto;
@@ -5712,7 +5730,7 @@ function Style() {
         -webkit-backdrop-filter: blur(12px);
         backdrop-filter: blur(12px);
         border-top: 1px solid var(--border-soft);
-        padding: 8px 12px;
+        padding: 10px 14px;
         z-index: 7;
       }
       @media (min-width: 600px) {
@@ -5721,12 +5739,12 @@ function Style() {
       .score-input-bar-row {
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 7px;
         flex-wrap: nowrap;
         justify-content: center;
       }
       .score-input-bar-label {
-        font-size: 11px;
+        font-size: 13px;
         color: var(--text-faint);
         font-weight: 600;
         text-transform: uppercase;
@@ -5734,16 +5752,16 @@ function Style() {
       }
       .score-input-bar-divider {
         width: 1px;
-        height: 20px;
+        height: 24px;
         background: var(--border-soft);
         margin: 0 4px;
       }
       .score-diff {
         font-family: 'JetBrains Mono', monospace;
-        font-size: 11px;
+        font-size: 13px;
         font-weight: 700;
-        padding: 2px 6px;
-        border-radius: 4px;
+        padding: 3px 7px;
+        border-radius: 5px;
         margin-left: 2px;
       }
       .score-diff.tone-great {
@@ -5780,9 +5798,9 @@ function Style() {
         opacity: 0.3;
       }
       .score-step-btn.small {
-        width: 30px;
-        height: 30px;
-        font-size: 16px;
+        width: 36px;
+        height: 36px;
+        font-size: 19px;
       }
       .score-input-num {
         flex: 0 0 auto;
@@ -5796,9 +5814,9 @@ function Style() {
         outline: none;
       }
       .score-input-num.small {
-        width: 44px;
-        height: 30px;
-        font-size: 15px;
+        width: 53px;
+        height: 36px;
+        font-size: 18px;
         padding: 0;
       }
       .score-input-num:focus {
@@ -5808,8 +5826,8 @@ function Style() {
       .fab {
         position: fixed;
         right: 18px;
-        /* hole-nav (64px) + score-input-bar (約50px) + 18px margin */
-        bottom: calc(132px + env(safe-area-inset-bottom));
+        /* hole-nav (64px) + score-input-bar (約60px、20%拡大後) + 18px margin */
+        bottom: calc(142px + env(safe-area-inset-bottom));
         width: 56px; height: 56px;
         background: var(--green); color: #0a0a0a;
         border-radius: 50%;
@@ -5820,7 +5838,7 @@ function Style() {
       /* ショット一覧の下部にスコアバー＋hole-nav分の余白 */
       .round-screen .shot-list,
       .round-screen .empty-shots {
-        padding-bottom: 130px;
+        padding-bottom: 140px;
       }
       .hole-nav {
         position: fixed;
@@ -7399,7 +7417,7 @@ function Style() {
       .app.in-csb .bottom-nav { bottom: 42px; }
       .app.in-csb .hole-nav { bottom: calc(42px + env(safe-area-inset-bottom)); }
       .app.in-csb .score-input-bar { bottom: calc(64px + 42px + env(safe-area-inset-bottom)); }
-      .app.in-csb .fab { bottom: calc(132px + 42px + env(safe-area-inset-bottom)); }
+      .app.in-csb .fab { bottom: calc(142px + 42px + env(safe-area-inset-bottom)); }
 
       /* Standalone (本番Safari/Chrome、PWA含む) はそのままbottom指定が効く */
     `}</style>
