@@ -1420,6 +1420,26 @@ function computeWedgeStats(state) {
     const dists = shots
       .filter((s) => s.wedgeDistance != null && !isExcludedFromAvg(s))
       .map((s) => s.wedgeDistance);
+    // v2.1: 狙い vs 実際の差分（精度）
+    // - excludeFromAvg は除外
+    // - 狙いと実距離の両方が入っているショットだけ対象
+    const diffShots = shots.filter(
+      (s) =>
+        s.wedgeTargetDistance != null &&
+        s.wedgeDistance != null &&
+        !isExcludedFromAvg(s)
+    );
+    const diffs = diffShots.map(
+      (s) => s.wedgeDistance - s.wedgeTargetDistance
+    );
+    const absMean = diffs.length
+      ? Math.round(
+          diffs.reduce((sum, d) => sum + Math.abs(d), 0) / diffs.length
+        )
+      : null;
+    const signedMean = diffs.length
+      ? Math.round(diffs.reduce((sum, d) => sum + d, 0) / diffs.length)
+      : null;
     // ピン/乗 = 寄せ成功
     const successCount = resultCounts.pin + resultCounts.green;
     // ミス = ショート/オーバー/左/右、または excludeFromAvg
@@ -1443,6 +1463,10 @@ function computeWedgeStats(state) {
       missRate: shots.length
         ? Math.round((missCount / shots.length) * 100)
         : null,
+      // v2.1: 距離精度
+      diffN: diffs.length, // サンプル数
+      absMeanDiff: absMean, // 絶対誤差平均（精度の指標）
+      signedMeanDiff: signedMean, // 符号付き平均誤差（クセの指標）
     };
   });
 }
@@ -3199,9 +3223,12 @@ function ShotEditor({
   const [puttCount, setPuttCount] = useState(1);
 
   // v2.1: ウェッジ専用 state
+  const [wedgeTargetDistance, setWedgeTargetDistance] = useState(
+    existing?.wedgeTargetDistance ?? null
+  ); // 狙った距離
   const [wedgeDistance, setWedgeDistance] = useState(
     existing?.wedgeDistance ?? null
-  );
+  ); // 実際に打った距離
   const [wedgeResult, setWedgeResult] = useState(
     existing?.wedgeResult || null
   ); // 'pin' | 'green' | 'over' | 'short' | 'left' | 'right'
@@ -4082,7 +4109,59 @@ function ShotEditor({
         {isWedge && (
           <>
             <div className="editor-section">
-              <div className="editor-label">距離（{unit}）</div>
+              <div className="editor-label">狙い距離（{unit}）</div>
+              <div className="distance-display">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  className="distance-input-large"
+                  value={wedgeTargetDistance ?? ""}
+                  placeholder="50"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setWedgeTargetDistance(v === "" ? null : Number(v));
+                  }}
+                />
+                <span className="distance-unit-large">{unit}</span>
+              </div>
+              <div className="putt-distance-shortcuts">
+                {[20, 30, 50, 70, 90, 110].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    className={`putt-shortcut ${
+                      wedgeTargetDistance === d ? "on" : ""
+                    }`}
+                    onClick={() => setWedgeTargetDistance(d)}
+                  >
+                    {d}{unit}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="editor-section">
+              <div className="editor-label">
+                実距離（{unit}）
+                {wedgeTargetDistance != null &&
+                  wedgeDistance != null && (
+                    <span
+                      className={`wedge-diff-badge ${
+                        wedgeDistance > wedgeTargetDistance
+                          ? "long"
+                          : wedgeDistance < wedgeTargetDistance
+                          ? "short"
+                          : "perfect"
+                      }`}
+                    >
+                      {wedgeDistance === wedgeTargetDistance
+                        ? "ぴったり"
+                        : wedgeDistance > wedgeTargetDistance
+                        ? `+${wedgeDistance - wedgeTargetDistance}${unit} 長め`
+                        : `${wedgeDistance - wedgeTargetDistance}${unit} 短め`}
+                    </span>
+                  )}
+              </div>
               <div className="distance-display">
                 <input
                   type="number"
@@ -4197,6 +4276,7 @@ function ShotEditor({
                     ? {
                         // ウェッジ専用フィールド（コントロールショット扱い）
                         clubId,
+                        wedgeTargetDistance,
                         wedgeDistance,
                         wedgeResult,
                         memo,
@@ -4322,6 +4402,8 @@ function WedgeTab({ usedWedges, unit }) {
         <br />
         <b>ピン率</b>＝ピン側に寄せた割合 / <b>ミス率</b>＝ショート・オーバー・左右外し・想定外ミスの割合
         <br />
+        <b>距離精度</b>＝狙い距離と実距離の差（絶対誤差で精度、符号付き平均で長め/短めのクセ）
+        <br />
         <span className="distance-hint-note">
           ※ ウェッジは全てコントロールショット扱い。フルショットも記録するならアイアンとして登録してください
         </span>
@@ -4334,6 +4416,18 @@ function WedgeTab({ usedWedges, unit }) {
           {usedWedges.map((s) => {
             const total = s.n;
             const rc = s.resultCounts;
+            const signedSign =
+              s.signedMeanDiff > 0
+                ? "+"
+                : s.signedMeanDiff < 0
+                ? ""
+                : "±";
+            const signedTrend =
+              s.signedMeanDiff > 0
+                ? "長め"
+                : s.signedMeanDiff < 0
+                ? "短め"
+                : "ぴったり";
             return (
               <div key={s.club.id} className="wedge-card">
                 <div className="wedge-card-head">
@@ -4369,6 +4463,35 @@ function WedgeTab({ usedWedges, unit }) {
                       {s.missRate != null ? `${s.missRate}%` : "—"}
                     </div>
                   </div>
+                  {/* v2.1: 狙い vs 実距離の精度（データがある時のみ表示） */}
+                  {s.diffN > 0 && (
+                    <>
+                      <div className="wedge-stat">
+                        <div className="wedge-stat-label">
+                          絶対誤差 ({s.diffN}回)
+                        </div>
+                        <div className="wedge-stat-value">
+                          ±{s.absMeanDiff} {unit}
+                        </div>
+                      </div>
+                      <div className="wedge-stat">
+                        <div className="wedge-stat-label">クセ</div>
+                        <div
+                          className={`wedge-stat-value ${
+                            s.signedMeanDiff > 0
+                              ? "miss"
+                              : s.signedMeanDiff < 0
+                              ? "miss"
+                              : "good"
+                          }`}
+                        >
+                          {signedSign}
+                          {s.signedMeanDiff} {unit}
+                          <span className="wedge-stat-sub">{signedTrend}</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
                 <div className="wedge-result-bar">
                   {[
@@ -6139,6 +6262,33 @@ function Style() {
       }
       .wedge-result-segment.tone-miss {
         background: var(--amber, #ffb84d);
+      }
+      /* v2.1: 距離精度のサブテキスト（クセラベル） */
+      .wedge-stat-sub {
+        font-size: 9px;
+        margin-left: 6px;
+        font-weight: 600;
+        color: var(--text-faint);
+      }
+      /* v2.1: ウェッジ実距離横の差分バッジ */
+      .wedge-diff-badge {
+        margin-left: 10px;
+        padding: 3px 7px;
+        border-radius: 5px;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .wedge-diff-badge.perfect {
+        background: rgba(182, 242, 74, 0.2);
+        color: var(--green);
+      }
+      .wedge-diff-badge.long {
+        background: rgba(255, 184, 77, 0.2);
+        color: var(--amber, #ffb84d);
+      }
+      .wedge-diff-badge.short {
+        background: rgba(94, 184, 255, 0.2);
+        color: var(--tone-ok, #5eb8ff);
       }
 
       /* SHEET ACTIONS */
