@@ -4138,6 +4138,25 @@ function ShotEditor({
                   </button>
                 ))}
               </div>
+              <div className="wedge-adjust-row">
+                {[-10, 5, 10].map((delta) => (
+                  <button
+                    key={delta}
+                    type="button"
+                    className={`wedge-adjust-btn ${
+                      delta < 0 ? "minus" : "plus"
+                    }`}
+                    disabled={wedgeTargetDistance == null}
+                    onClick={() => {
+                      if (wedgeTargetDistance == null) return;
+                      const next = Math.max(0, wedgeTargetDistance + delta);
+                      setWedgeTargetDistance(next);
+                    }}
+                  >
+                    {delta > 0 ? `+${delta}` : delta}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="editor-section">
@@ -4187,6 +4206,25 @@ function ShotEditor({
                     onClick={() => setWedgeDistance(d)}
                   >
                     {d}{unit}
+                  </button>
+                ))}
+              </div>
+              <div className="wedge-adjust-row">
+                {[-10, 5, 10].map((delta) => (
+                  <button
+                    key={delta}
+                    type="button"
+                    className={`wedge-adjust-btn ${
+                      delta < 0 ? "minus" : "plus"
+                    }`}
+                    disabled={wedgeDistance == null}
+                    onClick={() => {
+                      if (wedgeDistance == null) return;
+                      const next = Math.max(0, wedgeDistance + delta);
+                      setWedgeDistance(next);
+                    }}
+                  >
+                    {delta > 0 ? `+${delta}` : delta}
                   </button>
                 ))}
               </div>
@@ -6289,6 +6327,37 @@ function Style() {
       .wedge-diff-badge.short {
         background: rgba(94, 184, 255, 0.2);
         color: var(--tone-ok, #5eb8ff);
+      }
+      /* v2.1: ウェッジ距離 ±調整ボタン */
+      .wedge-adjust-row {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+      }
+      .wedge-adjust-btn {
+        flex: 1;
+        padding: 10px 0;
+        background: var(--bg-2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        font-size: 14px;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .wedge-adjust-btn:active {
+        transform: scale(0.95);
+      }
+      .wedge-adjust-btn:disabled {
+        opacity: 0.3;
+      }
+      .wedge-adjust-btn.minus {
+        color: var(--tone-ok, #5eb8ff);
+        border-color: rgba(94, 184, 255, 0.3);
+      }
+      .wedge-adjust-btn.plus {
+        color: var(--amber, #ffb84d);
+        border-color: rgba(255, 184, 77, 0.3);
       }
 
       /* SHEET ACTIONS */
