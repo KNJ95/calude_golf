@@ -4886,5 +4886,629 @@
         "distance": 217
       }
     ]
+  },
+  {
+    "venue": "札幌リージェントゴルフ倶楽部",
+    "course": "旧コースOUT",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 516
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 376
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 185
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 478
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 373
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 342
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 168
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 353
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 517
+      }
+    ]
+  },
+  {
+    "venue": "札幌リージェントゴルフ倶楽部",
+    "course": "旧コースOUT",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 452
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 355
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 175
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 409
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 361
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 328
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 156
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 332
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 497
+      }
+    ]
+  },
+  {
+    "venue": "札幌リージェントゴルフ倶楽部",
+    "course": "旧コースOUT",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 448
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 346
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 138
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 395
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 305
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 312
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 133
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 326
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 360
+      }
+    ]
+  },
+  {
+    "venue": "札幌リージェントゴルフ倶楽部",
+    "course": "旧コースIN",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 10,
+        "par": 4,
+        "distance": 381
+      },
+      {
+        "number": 11,
+        "par": 4,
+        "distance": 430
+      },
+      {
+        "number": 12,
+        "par": 5,
+        "distance": 584
+      },
+      {
+        "number": 13,
+        "par": 3,
+        "distance": 200
+      },
+      {
+        "number": 14,
+        "par": 4,
+        "distance": 418
+      },
+      {
+        "number": 15,
+        "par": 4,
+        "distance": 369
+      },
+      {
+        "number": 16,
+        "par": 5,
+        "distance": 554
+      },
+      {
+        "number": 17,
+        "par": 3,
+        "distance": 175
+      },
+      {
+        "number": 18,
+        "par": 4,
+        "distance": 432
+      }
+    ]
+  },
+  {
+    "venue": "札幌リージェントゴルフ倶楽部",
+    "course": "旧コースIN",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 10,
+        "par": 4,
+        "distance": 353
+      },
+      {
+        "number": 11,
+        "par": 4,
+        "distance": 408
+      },
+      {
+        "number": 12,
+        "par": 5,
+        "distance": 483
+      },
+      {
+        "number": 13,
+        "par": 3,
+        "distance": 176
+      },
+      {
+        "number": 14,
+        "par": 4,
+        "distance": 397
+      },
+      {
+        "number": 15,
+        "par": 4,
+        "distance": 350
+      },
+      {
+        "number": 16,
+        "par": 5,
+        "distance": 496
+      },
+      {
+        "number": 17,
+        "par": 3,
+        "distance": 161
+      },
+      {
+        "number": 18,
+        "par": 4,
+        "distance": 392
+      }
+    ]
+  },
+  {
+    "venue": "札幌リージェントゴルフ倶楽部",
+    "course": "旧コースIN",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 10,
+        "par": 4,
+        "distance": 290
+      },
+      {
+        "number": 11,
+        "par": 4,
+        "distance": 354
+      },
+      {
+        "number": 12,
+        "par": 5,
+        "distance": 433
+      },
+      {
+        "number": 13,
+        "par": 3,
+        "distance": 115
+      },
+      {
+        "number": 14,
+        "par": 4,
+        "distance": 336
+      },
+      {
+        "number": 15,
+        "par": 4,
+        "distance": 275
+      },
+      {
+        "number": 16,
+        "par": 5,
+        "distance": 440
+      },
+      {
+        "number": 17,
+        "par": 3,
+        "distance": 120
+      },
+      {
+        "number": 18,
+        "par": 4,
+        "distance": 373
+      }
+    ]
+  },
+  {
+    "venue": "札幌リージェントゴルフ倶楽部",
+    "course": "新コースOUT",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 472
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 393
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 166
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 375
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 555
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 385
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 417
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 211
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 414
+      }
+    ]
+  },
+  {
+    "venue": "札幌リージェントゴルフ倶楽部",
+    "course": "新コースOUT",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 472
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 348
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 128
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 339
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 517
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 348
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 383
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 152
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 383
+      }
+    ]
+  },
+  {
+    "venue": "札幌リージェントゴルフ倶楽部",
+    "course": "新コースOUT",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 420
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 273
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 108
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 315
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 437
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 311
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 366
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 121
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 335
+      }
+    ]
+  },
+  {
+    "venue": "札幌リージェントゴルフ倶楽部",
+    "course": "新コースIN",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 10,
+        "par": 5,
+        "distance": 490
+      },
+      {
+        "number": 11,
+        "par": 4,
+        "distance": 349
+      },
+      {
+        "number": 12,
+        "par": 4,
+        "distance": 377
+      },
+      {
+        "number": 13,
+        "par": 3,
+        "distance": 219
+      },
+      {
+        "number": 14,
+        "par": 4,
+        "distance": 369
+      },
+      {
+        "number": 15,
+        "par": 5,
+        "distance": 505
+      },
+      {
+        "number": 16,
+        "par": 4,
+        "distance": 408
+      },
+      {
+        "number": 17,
+        "par": 3,
+        "distance": 152
+      },
+      {
+        "number": 18,
+        "par": 4,
+        "distance": 415
+      }
+    ]
+  },
+  {
+    "venue": "札幌リージェントゴルフ倶楽部",
+    "course": "新コースIN",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 10,
+        "par": 5,
+        "distance": 472
+      },
+      {
+        "number": 11,
+        "par": 4,
+        "distance": 293
+      },
+      {
+        "number": 12,
+        "par": 4,
+        "distance": 331
+      },
+      {
+        "number": 13,
+        "par": 3,
+        "distance": 164
+      },
+      {
+        "number": 14,
+        "par": 4,
+        "distance": 325
+      },
+      {
+        "number": 15,
+        "par": 5,
+        "distance": 482
+      },
+      {
+        "number": 16,
+        "par": 4,
+        "distance": 359
+      },
+      {
+        "number": 17,
+        "par": 3,
+        "distance": 131
+      },
+      {
+        "number": 18,
+        "par": 4,
+        "distance": 361
+      }
+    ]
+  },
+  {
+    "venue": "札幌リージェントゴルフ倶楽部",
+    "course": "新コースIN",
+    "tee": "Red",
+    "holes": [
+      {
+        "number": 10,
+        "par": 5,
+        "distance": 430
+      },
+      {
+        "number": 11,
+        "par": 4,
+        "distance": 276
+      },
+      {
+        "number": 12,
+        "par": 4,
+        "distance": 300
+      },
+      {
+        "number": 13,
+        "par": 3,
+        "distance": 142
+      },
+      {
+        "number": 14,
+        "par": 4,
+        "distance": 301
+      },
+      {
+        "number": 15,
+        "par": 5,
+        "distance": 466
+      },
+      {
+        "number": 16,
+        "par": 4,
+        "distance": 331
+      },
+      {
+        "number": 17,
+        "par": 3,
+        "distance": 109
+      },
+      {
+        "number": 18,
+        "par": 4,
+        "distance": 310
+      }
+    ]
   }
 ]
