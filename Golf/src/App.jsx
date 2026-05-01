@@ -289,15 +289,24 @@ function isShotOffPlay(shot) {
   const o = getShotOutcome(shot);
   return o !== "in_play";
 }
-// 打ち直しフラグ（v2.0で追加、距離分析から除外）
+// 打ち直しフラグ（v2.0で追加、距離分析・ミス率分析から完全除外）
 function isReplay(shot) {
   return !!shot.isReplay;
 }
-// 「ミス」とみなすショット（自己評価が miss/bad、または off-play）
+// v2.1: 平均距離からのみ除外（ミス率にはカウント）
+// 「フェアウェイには行ったが想定外の方向」「ギリギリOBではないが酷いショット」など
+function isExcludedFromAvg(shot) {
+  return !!shot.excludeFromAvg;
+}
+// 「ミス」とみなすショット
+// - 自己評価が miss/bad
+// - off-play（OB等）
+// - excludeFromAvg フラグ（手動でミス指定）
 function isMissShot(shot) {
   const r = getShotSelfRating(shot);
   if (r === "miss" || r === "bad") return true;
   if (isShotOffPlay(shot)) return true;
+  if (isExcludedFromAvg(shot)) return true;
   return false;
 }
 // ホールのスコア（手入力 manualScore 優先、なければ shots.length）
@@ -1136,10 +1145,16 @@ function buildRoundReviewPrompt(round, clubs, unit) {
   Object.entries(byClub).forEach(([cid, shots]) => {
     const c = clubMap[cid];
     if (!c) return;
-    // パター以外のクラブのみ詳細を出力（パットは別途別セクション、専用分析を予定）
-    if (c.category === "putter") return;
+    // ウェッジとパターを除外（アプローチ・パットは別性質、距離・ミス率分析の対象外）
+    if (c.category === "putter" || c.category === "wedge") return;
     const dists = shots
-      .filter((s) => s.distance != null && !isShotOffPlay(s) && !isReplay(s))
+      .filter(
+        (s) =>
+          s.distance != null &&
+          !isShotOffPlay(s) &&
+          !isReplay(s) &&
+          !isExcludedFromAvg(s)
+      )
       .map((s) => s.distance);
     const dirs = shots.filter((s) => s.direction);
     const depths = shots.filter((s) => s.depth);
@@ -1221,9 +1236,12 @@ function buildIssueAnalysisPrompt(state) {
   }
 
   const stats = computeClubStats(state);
-  // パター以外のクラブのみ対象（パターは別途専用分析を予定）
+  // ウェッジとパターを除外（アプローチ・パターは別性質）
   const used = stats.filter(
-    (s) => s.n > 0 && s.club.category !== "putter"
+    (s) =>
+      s.n > 0 &&
+      s.club.category !== "putter" &&
+      s.club.category !== "wedge"
   );
   if (used.length > 0) {
     lines.push("## クラブ別パフォーマンス");
@@ -1265,9 +1283,12 @@ function buildClubDistancePrompt(state) {
   lines.push("");
 
   const stats = computeClubStats(state);
-  // パター以外のクラブのみ対象（パターは別途専用分析を予定）
+  // ウェッジとパターを除外（アプローチ・パターは別性質）
   const used = stats.filter(
-    (s) => s.trimmed != null && s.club.category !== "putter"
+    (s) =>
+      s.trimmed != null &&
+      s.club.category !== "putter" &&
+      s.club.category !== "wedge"
   );
   if (used.length === 0) {
     lines.push("（まだデータが蓄積されていません）");
@@ -1321,7 +1342,13 @@ function computeClubStats(state) {
       h.shots.forEach((s) => {
         if (!byClub[s.clubId]) return;
         byClub[s.clubId].shots.push(s);
-        if (s.distance != null && !isShotOffPlay(s) && !isReplay(s)) {
+        // 距離分析対象: distance あり、プレー外でない、打ち直しでない、平均除外フラグでない
+        if (
+          s.distance != null &&
+          !isShotOffPlay(s) &&
+          !isReplay(s) &&
+          !isExcludedFromAvg(s)
+        ) {
           byClub[s.clubId].all.push(s.distance);
           if (s.lie === "fw" || s.lie === "tee")
             byClub[s.clubId].fw.push(s.distance);
@@ -1333,9 +1360,9 @@ function computeClubStats(state) {
   return state.clubs.map((c) => {
     const data = byClub[c.id];
     const all = data.all;
-    const missCount = data.shots.filter((s) =>
-      isMissShot(s)
-    ).length;
+    // ミス率計算: 打ち直しは完全除外、それ以外は対象
+    const missableShots = data.shots.filter((s) => !isReplay(s));
+    const missCount = missableShots.filter((s) => isMissShot(s)).length;
     const dirShots = data.shots.filter((s) => s.direction);
     const dir = {
       left: dirShots.filter((s) => s.direction === "left").length,
@@ -1366,8 +1393,8 @@ function computeClubStats(state) {
       roughAvg: data.rough.length
         ? Math.round(data.rough.reduce((a, b) => a + b, 0) / data.rough.length)
         : null,
-      missRate: data.shots.length
-        ? Math.round((missCount / data.shots.length) * 100)
+      missRate: missableShots.length
+        ? Math.round((missCount / missableShots.length) * 100)
         : null,
       dir,
       depth,
@@ -3057,6 +3084,10 @@ function ShotEditor({
     existing ? getShotOutcome(existing) : "in_play"
   );
   const [isReplayShot, setIsReplayShot] = useState(!!existing?.isReplay);
+  // v2.1: 平均距離からのみ除外（ミス率にはカウント）
+  const [excludeFromAvgShot, setExcludeFromAvgShot] = useState(
+    !!existing?.excludeFromAvg
+  );
   const [memo, setMemo] = useState(existing?.memo || "");
 
   // v2.1: パター専用 state
@@ -3802,7 +3833,20 @@ function ShotEditor({
               onChange={(e) => setIsReplayShot(e.target.checked)}
             />
             <span className="replay-toggle-text">
-              <b>打ち直し</b>（OB等の後の再ショット・距離分析から除外）
+              <b>打ち直し</b>（OB等の後の再ショット・距離・ミス率分析から完全除外）
+            </span>
+          </label>
+        </div>
+
+        <div className="editor-section">
+          <label className="replay-toggle">
+            <input
+              type="checkbox"
+              checked={excludeFromAvgShot}
+              onChange={(e) => setExcludeFromAvgShot(e.target.checked)}
+            />
+            <span className="replay-toggle-text">
+              <b>平均距離から除外</b>（ミス率にはカウントする / 自己評価では拾えないミス用）
             </span>
           </label>
         </div>
@@ -4002,6 +4046,7 @@ function ShotEditor({
                         selfRating,
                         outcome,
                         isReplay: isReplayShot,
+                        excludeFromAvg: excludeFromAvgShot,
                         memo,
                       }
                 )
@@ -4032,9 +4077,13 @@ function EmptyAnalytics() {
 function AnalyticsView({ state, onBack }) {
   const [tab, setTab] = useState("distance");
   const stats = useMemo(() => computeClubStats(state), [state]);
-  // 分析対象はパター以外のクラブのみ（パターは別途専用分析を予定）
+  // 分析対象はウェッジとパター以外のクラブのみ
+  // （アプローチ・パターは性質が異なるため、距離分析・ミス率分析の対象外）
   const usedClubs = stats.filter(
-    (s) => s.n > 0 && s.club.category !== "putter"
+    (s) =>
+      s.n > 0 &&
+      s.club.category !== "putter" &&
+      s.club.category !== "wedge"
   );
 
   return (
@@ -4095,6 +4144,17 @@ function DistanceTab({ usedClubs, unit, state }) {
           sublabel="ラウンド中、Geminiに距離を相談する用"
           onBuild={() => buildClubDistancePrompt(state)}
         />
+      </div>
+      <div className="distance-hint">
+        💡 <b>信頼距離</b>＝外れ値を除外した平均「当たればこの距離」／
+        <b>ミス率</b>＝そのクラブで打って△・✕評価 or ペナ（OB等）になった割合
+        <br />
+        <span className="distance-hint-note">
+          ※ ウェッジ・パターは除外（アプローチ・パットは性質が異なるため）
+          <br />
+          ※ ショット入力時に <b>「平均距離から除外」</b> をONにすると、
+          そのショットは平均からは外しつつミス率にはカウントできます
+        </span>
       </div>
       <div className="distance-chart">
         {usedClubs
@@ -6515,6 +6575,23 @@ function Style() {
       }
 
       /* DISTANCE CHART */
+      .distance-hint {
+        margin: 4px 16px 12px;
+        padding: 10px 12px;
+        background: rgba(94, 184, 255, 0.08);
+        border: 1px solid rgba(94, 184, 255, 0.2);
+        border-radius: 8px;
+        font-size: 11px;
+        color: var(--text-dim);
+        line-height: 1.6;
+      }
+      .distance-hint b {
+        color: var(--text);
+      }
+      .distance-hint-note {
+        color: var(--text-faint);
+        font-size: 10px;
+      }
       .distance-chart {
         padding: 12px 16px 0;
         display: flex; flex-direction: column; gap: 8px;
