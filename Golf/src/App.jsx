@@ -1045,6 +1045,13 @@ const OUTCOME_LABELS = {
 };
 const DIR_LABELS = { left: "左", straight: "直", right: "右" };
 const DEPTH_LABELS = { short: "ショート", pin: "ピン", over: "オーバー" };
+// v2.1: 打感（任意）
+const CONTACT_LABELS = {
+  nice: "ナイス",
+  duff: "ダフリ",
+  top: "トップ",
+  shank: "シャンク",
+};
 
 
 // ============================================================
@@ -3097,7 +3104,13 @@ function ShotRowInner({ index, shot, clubs, unit, onClick }) {
             <span className="dist-empty">—</span>
           )}
         </div>
-        <div className="shot-tendency-tags" />
+        <div className="shot-tendency-tags">
+          {shot.contact && shot.contact !== "nice" && (
+            <span className="tag tag-contact">
+              {CONTACT_LABELS[shot.contact]}
+            </span>
+          )}
+        </div>
         <div className="shot-lie">—</div>
         <div className="shot-result-cell">
           {wResult && (
@@ -3153,6 +3166,11 @@ function ShotRowInner({ index, shot, clubs, unit, onClick }) {
       <div className="shot-tendency-tags">
         {dirLabel && <span className="tag tag-dir">{dirLabel}</span>}
         {depthLabel && <span className="tag tag-depth">{depthLabel}</span>}
+        {shot.contact && shot.contact !== "nice" && (
+          <span className="tag tag-contact">
+            {CONTACT_LABELS[shot.contact]}
+          </span>
+        )}
       </div>
       <div className="shot-lie">{lie?.label}</div>
       <div className="shot-result-cell">
@@ -3200,6 +3218,8 @@ function ShotEditor({
   const [outcome, setOutcome] = useState(
     existing ? getShotOutcome(existing) : "in_play"
   );
+  // v2.1: 打感（任意：nice/duff/top/shank/null）通常クラブ・ウェッジで使用
+  const [contact, setContact] = useState(existing?.contact || null);
   // v2.1: 平均距離から除外フラグ（ミス率にはカウント）
   const [excludeFromAvgShot, setExcludeFromAvgShot] = useState(
     !!existing?.excludeFromAvg
@@ -3930,6 +3950,29 @@ function ShotEditor({
           </div>
         </div>
 
+        <div className="editor-section">
+          <div className="editor-label">打感（任意）</div>
+          <div className="contact-row">
+            {[
+              { id: "nice", label: "ナイス", tone: "good" },
+              { id: "duff", label: "ダフリ", tone: "miss" },
+              { id: "top", label: "トップ", tone: "miss" },
+              { id: "shank", label: "シャンク", tone: "miss" },
+            ].map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className={`chip contact-chip tone-${c.tone} ${
+                  contact === c.id ? "on" : ""
+                }`}
+                onClick={() => setContact(contact === c.id ? null : c.id)}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className={`editor-section ${highlightFields.outcome ? "highlight" : ""}`}>
           <div className="editor-label">結果</div>
           <div className="outcome-row">
@@ -4254,6 +4297,29 @@ function ShotEditor({
             </div>
 
             <div className="editor-section">
+              <div className="editor-label">打感（任意）</div>
+              <div className="contact-row">
+                {[
+                  { id: "nice", label: "ナイス", tone: "good" },
+                  { id: "duff", label: "ダフリ", tone: "miss" },
+                  { id: "top", label: "トップ", tone: "miss" },
+                  { id: "shank", label: "シャンク", tone: "miss" },
+                ].map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`chip contact-chip tone-${c.tone} ${
+                      contact === c.id ? "on" : ""
+                    }`}
+                    onClick={() => setContact(contact === c.id ? null : c.id)}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="editor-section">
               <label className="replay-toggle">
                 <input
                   type="checkbox"
@@ -4315,6 +4381,7 @@ function ShotEditor({
                         wedgeTargetDistance,
                         wedgeDistance,
                         wedgeResult,
+                        contact,
                         memo,
                         // outcome は in_play 固定（ウェッジは結果をwedgeResultで管理）
                         outcome: "in_play",
@@ -4329,6 +4396,7 @@ function ShotEditor({
                         depth,
                         selfRating,
                         outcome,
+                        contact,
                         excludeFromAvg: excludeFromAvgShot,
                         memo,
                       }
@@ -4358,7 +4426,9 @@ function EmptyAnalytics() {
 //  ANALYTICS
 // ============================================================
 function AnalyticsView({ state, onBack }) {
-  const [tab, setTab] = useState("distance");
+  const [tab, setTab] = useState("shot");
+  // v2.1: クラブ詳細画面の選択クラブID（null = リスト表示）
+  const [selectedClubId, setSelectedClubId] = useState(null);
   const stats = useMemo(() => computeClubStats(state), [state]);
   // 分析対象はウェッジとパター以外のクラブのみ
   // （アプローチ・パターは性質が異なるため、距離分析・ミス率分析の対象外）
@@ -4371,6 +4441,17 @@ function AnalyticsView({ state, onBack }) {
   // v2.1: ウェッジ専用統計
   const wedgeStats = useMemo(() => computeWedgeStats(state), [state]);
   const usedWedges = wedgeStats.filter((s) => s.n > 0);
+
+  // v2.1: クラブ詳細画面表示時はそれを返す
+  if (selectedClubId) {
+    return (
+      <ClubDetailView
+        clubId={selectedClubId}
+        state={state}
+        onBack={() => setSelectedClubId(null)}
+      />
+    );
+  }
 
   return (
     <div className="screen">
@@ -4389,10 +4470,10 @@ function AnalyticsView({ state, onBack }) {
 
       <div className="analytics-tabs">
         <button
-          className={`atab ${tab === "distance" ? "on" : ""}`}
-          onClick={() => setTab("distance")}
+          className={`atab ${tab === "shot" ? "on" : ""}`}
+          onClick={() => setTab("shot")}
         >
-          距離
+          ショット
         </button>
         <button
           className={`atab ${tab === "wedge" ? "on" : ""}`}
@@ -4414,8 +4495,13 @@ function AnalyticsView({ state, onBack }) {
         </button>
       </div>
 
-      {tab === "distance" && (
-        <DistanceTab usedClubs={usedClubs} unit={state.unit} state={state} />
+      {tab === "shot" && (
+        <ShotTab
+          usedClubs={usedClubs}
+          unit={state.unit}
+          state={state}
+          onClubClick={(clubId) => setSelectedClubId(clubId)}
+        />
       )}
       {tab === "wedge" && (
         <WedgeTab usedWedges={usedWedges} unit={state.unit} />
@@ -4562,7 +4648,8 @@ function WedgeTab({ usedWedges, unit }) {
   );
 }
 
-function DistanceTab({ usedClubs, unit, state }) {
+// v2.1: ショットタブ（クラブリスト形式、タップで詳細画面へ）
+function ShotTab({ usedClubs, unit, state, onClubClick }) {
   if (usedClubs.length === 0) return <EmptyAnalytics />;
   const maxDist = Math.max(1, ...usedClubs.map((s) => s.max || 0));
   return (
@@ -4575,97 +4662,481 @@ function DistanceTab({ usedClubs, unit, state }) {
         />
       </div>
       <div className="distance-hint">
-        💡 <b>信頼距離</b>＝外れ値を除外した平均「当たればこの距離」／
-        <b>ミス率</b>＝そのクラブで打って△・✕評価 or ペナ（OB等）になった割合
+        💡 <b>クラブをタップ</b>すると、そのクラブの詳細分析画面に移動します
+        <br />
+        <b>信頼距離</b>＝外れ値を除外した「当たればこの距離」／
+        <b>ミス率</b>＝△・✕評価 or ペナ（OB等）の割合
         <br />
         <span className="distance-hint-note">
-          ※ ウェッジ・パターは除外（アプローチ・パットは性質が異なるため）
-          <br />
-          ※ ショット入力時に <b>「平均距離から除外」</b> をONにすると、
-          そのショットは平均からは外しつつミス率にはカウントできます
+          ※ ウェッジ・パターは別タブ
         </span>
       </div>
-      <div className="distance-chart">
-        {usedClubs
-          .filter((s) => s.trimmed != null)
-          .map((s) => {
-            const pctTrim = ((s.trimmed || 0) / maxDist) * 100;
-            const pctMin = ((s.min || 0) / maxDist) * 100;
-            const pctMax = ((s.max || 0) / maxDist) * 100;
-            return (
-              <div key={s.club.id} className="dchart-row">
-                <div className="dchart-club">{s.club.name}</div>
-                <div className="dchart-track">
-                  <div
-                    className="dchart-range"
-                    style={{ left: `${pctMin}%`, width: `${pctMax - pctMin}%` }}
-                  />
-                  <div className="dchart-trim" style={{ left: `${pctTrim}%` }}>
-                    <span className="dchart-trim-num">{s.trimmed}</span>
+      <div className="club-list">
+        {usedClubs.map((s) => {
+          const pctTrim = s.trimmed
+            ? ((s.trimmed || 0) / maxDist) * 100
+            : 0;
+          return (
+            <button
+              key={s.club.id}
+              type="button"
+              className="club-list-item"
+              onClick={() => onClubClick(s.club.id)}
+            >
+              <div className="club-list-head">
+                <div className="club-list-name">{s.club.name}</div>
+                <div className="club-list-n">{s.n}回</div>
+              </div>
+              <div className="club-list-stats">
+                <div className="club-list-stat">
+                  <div className="club-list-stat-label">信頼距離</div>
+                  <div className="club-list-stat-value">
+                    {s.trimmed != null ? (
+                      <>
+                        <span className="num-large">{s.trimmed}</span>
+                        <span className="num-unit">{unit}</span>
+                      </>
+                    ) : (
+                      "—"
+                    )}
                   </div>
                 </div>
-                <div className="dchart-n">{s.n}</div>
+                <div className="club-list-stat">
+                  <div className="club-list-stat-label">レンジ</div>
+                  <div className="club-list-stat-value small">
+                    {s.min != null ? `${s.min}–${s.max}` : "—"}
+                  </div>
+                </div>
+                <div className="club-list-stat">
+                  <div className="club-list-stat-label">ミス率</div>
+                  <div
+                    className={`club-list-stat-value ${
+                      s.missRate > 40 ? "miss" : ""
+                    }`}
+                  >
+                    {s.missRate != null ? `${s.missRate}%` : "—"}
+                  </div>
+                </div>
+              </div>
+              {s.trimmed != null && (
+                <div className="club-list-bar">
+                  <div
+                    className="club-list-bar-fill"
+                    style={{ width: `${pctTrim}%` }}
+                  />
+                </div>
+              )}
+              <div className="club-list-arrow">›</div>
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+// v2.1: クラブ詳細画面
+function ClubDetailView({ clubId, state, onBack }) {
+  const club = state.clubs.find((c) => c.id === clubId);
+  const stats = useMemo(() => computeClubStats(state), [state]);
+  const clubStats = stats.find((s) => s.club.id === clubId);
+
+  // このクラブのショット集合（ラウンド・ホール情報込み）
+  const shotEntries = useMemo(() => {
+    const entries = [];
+    state.rounds.forEach((r) => {
+      r.holes.forEach((h) => {
+        h.shots.forEach((s, shotIdx) => {
+          if (s.clubId === clubId) {
+            entries.push({
+              shot: s,
+              round: r,
+              hole: h,
+              shotIdx,
+            });
+          }
+        });
+      });
+    });
+    return entries;
+  }, [state, clubId]);
+
+  // メモ付きショットを新しい順に並べる
+  const memoEntries = useMemo(() => {
+    return shotEntries
+      .filter((e) => e.shot.memo && e.shot.memo.trim() !== "")
+      .sort((a, b) => {
+        const da = new Date(a.round.date).getTime();
+        const db = new Date(b.round.date).getTime();
+        return db - da;
+      });
+  }, [shotEntries]);
+
+  // 結果分布
+  const outcomeCounts = useMemo(() => {
+    const counts = {};
+    shotEntries.forEach((e) => {
+      const oc = getShotOutcome(e.shot);
+      counts[oc] = (counts[oc] || 0) + 1;
+    });
+    return counts;
+  }, [shotEntries]);
+
+  // 自己評価分布
+  const ratingCounts = useMemo(() => {
+    const counts = {};
+    shotEntries.forEach((e) => {
+      const r = getShotSelfRating(e.shot);
+      if (r) counts[r] = (counts[r] || 0) + 1;
+    });
+    return counts;
+  }, [shotEntries]);
+
+  // v2.1: 打感分布
+  const contactCounts = useMemo(() => {
+    const counts = {};
+    shotEntries.forEach((e) => {
+      const c = e.shot.contact;
+      if (c) counts[c] = (counts[c] || 0) + 1;
+    });
+    return counts;
+  }, [shotEntries]);
+  const contactN = Object.values(contactCounts).reduce((a, b) => a + b, 0);
+
+  if (!club || !clubStats) {
+    return (
+      <div className="screen">
+        <header className="topbar">
+          <button className="icon-btn" onClick={onBack}>
+            <ChevronLeft size={22} />
+          </button>
+          <div className="topbar-title">
+            <div className="topbar-course">クラブ詳細</div>
+          </div>
+          <div className="icon-btn placeholder" />
+        </header>
+        <EmptyAnalytics />
+      </div>
+    );
+  }
+
+  const unit = state.unit;
+  const totalDir = clubStats.dir.n;
+  const totalDepth = clubStats.depth.n;
+
+  return (
+    <div className="screen">
+      <header className="topbar">
+        <button className="icon-btn" onClick={onBack}>
+          <ChevronLeft size={22} />
+        </button>
+        <div className="topbar-title">
+          <div className="topbar-course">{club.name}</div>
+          <div className="topbar-meta">{clubStats.n} ショット</div>
+        </div>
+        <div className="icon-btn placeholder" />
+      </header>
+
+      {/* 基本統計 */}
+      <div className="section">
+        <div className="section-head">
+          <div className="section-title">基本統計</div>
+        </div>
+        <div className="club-detail-stats">
+          <div className="cd-stat">
+            <div className="cd-stat-label">信頼距離</div>
+            <div className="cd-stat-value">
+              {clubStats.trimmed != null ? (
+                <>
+                  <span className="num-large">{clubStats.trimmed}</span>
+                  <span className="num-unit">{unit}</span>
+                </>
+              ) : (
+                "—"
+              )}
+            </div>
+          </div>
+          <div className="cd-stat">
+            <div className="cd-stat-label">中央値</div>
+            <div className="cd-stat-value">
+              {clubStats.median != null
+                ? `${clubStats.median} ${unit}`
+                : "—"}
+            </div>
+          </div>
+          <div className="cd-stat">
+            <div className="cd-stat-label">レンジ</div>
+            <div className="cd-stat-value small">
+              {clubStats.min != null
+                ? `${clubStats.min} – ${clubStats.max}`
+                : "—"}
+            </div>
+          </div>
+          <div className="cd-stat">
+            <div className="cd-stat-label">ミス率</div>
+            <div
+              className={`cd-stat-value ${
+                clubStats.missRate > 40 ? "miss" : ""
+              }`}
+            >
+              {clubStats.missRate != null
+                ? `${clubStats.missRate}%`
+                : "—"}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ライ別距離 */}
+      {(clubStats.fwAvg != null || clubStats.roughAvg != null) && (
+        <div className="section">
+          <div className="section-head">
+            <div className="section-title">ライ別距離</div>
+          </div>
+          <div className="cd-lie-row">
+            <div className="cd-lie-card">
+              <div className="cd-lie-label">フェアウェイ</div>
+              <div className="cd-lie-num">
+                {clubStats.fwAvg != null
+                  ? `${clubStats.fwAvg} ${unit}`
+                  : "—"}
+              </div>
+            </div>
+            <div className="cd-lie-card rough">
+              <div className="cd-lie-label">ラフ</div>
+              <div className="cd-lie-num">
+                {clubStats.roughAvg != null
+                  ? `${clubStats.roughAvg} ${unit}`
+                  : "—"}
+              </div>
+            </div>
+            {clubStats.fwAvg != null && clubStats.roughAvg != null && (
+              <div className="cd-lie-diff">
+                差 {Math.abs(clubStats.fwAvg - clubStats.roughAvg)} {unit}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 方向の傾向 */}
+      {totalDir > 0 && (
+        <div className="section">
+          <div className="section-head">
+            <div className="section-title">方向の傾向（{totalDir}回）</div>
+          </div>
+          <div className="cd-segment-bar">
+            {[
+              { key: "left", label: "左", color: "miss" },
+              { key: "straight", label: "直", color: "good" },
+              { key: "right", label: "右", color: "miss" },
+            ].map((seg) => {
+              const count = clubStats.dir[seg.key] || 0;
+              if (count === 0) return null;
+              const pct = (count / totalDir) * 100;
+              return (
+                <div
+                  key={seg.key}
+                  className={`cd-segment tone-${seg.color}`}
+                  style={{ width: `${pct}%` }}
+                  title={`${seg.label}: ${count}回 (${Math.round(pct)}%)`}
+                >
+                  {pct > 12 ? `${seg.label} ${Math.round(pct)}%` : ""}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 距離感の傾向 */}
+      {totalDepth > 0 && (
+        <div className="section">
+          <div className="section-head">
+            <div className="section-title">
+              距離感の傾向（{totalDepth}回）
+            </div>
+          </div>
+          <div className="cd-segment-bar">
+            {[
+              { key: "short", label: "短", color: "miss" },
+              { key: "pin", label: "ピン", color: "good" },
+              { key: "long", label: "長", color: "miss" },
+            ].map((seg) => {
+              const count = clubStats.depth[seg.key] || 0;
+              if (count === 0) return null;
+              const pct = (count / totalDepth) * 100;
+              return (
+                <div
+                  key={seg.key}
+                  className={`cd-segment tone-${seg.color}`}
+                  style={{ width: `${pct}%` }}
+                  title={`${seg.label}: ${count}回 (${Math.round(pct)}%)`}
+                >
+                  {pct > 12 ? `${seg.label} ${Math.round(pct)}%` : ""}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 結果分布 */}
+      <div className="section">
+        <div className="section-head">
+          <div className="section-title">結果の分布</div>
+        </div>
+        <div className="cd-outcome-list">
+          {Object.entries(outcomeCounts).map(([oc, count]) => {
+            const pct = Math.round((count / clubStats.n) * 100);
+            const tone =
+              oc === "in_play" ? "good" : oc === "ob" ? "miss" : "miss";
+            return (
+              <div key={oc} className="cd-outcome-row">
+                <div className={`cd-outcome-label tone-${tone}`}>
+                  {OUTCOME_LABELS[oc] || oc}
+                </div>
+                <div className="cd-outcome-bar">
+                  <div
+                    className={`cd-outcome-fill tone-${tone}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <div className="cd-outcome-count">
+                  {count}回 ({pct}%)
+                </div>
               </div>
             );
           })}
-      </div>
-      <div className="section">
-        <div className="section-head">
-          <div className="section-title">詳細データ</div>
         </div>
-        <div className="stat-table">
-          <div className="stat-table-head">
-            <div>クラブ</div>
-            <div>信頼距離</div>
-            <div>中央値</div>
-            <div>レンジ</div>
-            <div>ミス率</div>
-            <div>n</div>
+      </div>
+
+      {/* 自己評価 */}
+      {Object.keys(ratingCounts).length > 0 && (
+        <div className="section">
+          <div className="section-head">
+            <div className="section-title">自己評価の分布</div>
           </div>
-          {usedClubs.map((s) => (
-            <div key={s.club.id} className="stat-table-row">
-              <div className="st-club">{s.club.name}</div>
-              <div className="st-trim">{s.trimmed ?? "—"}</div>
-              <div>{s.median ?? "—"}</div>
-              <div className="st-range">
-                {s.min != null ? `${s.min}–${s.max}` : "—"}
-              </div>
-              <div className={`st-miss ${s.missRate > 40 ? "high" : ""}`}>
-                {s.missRate != null ? `${s.missRate}%` : "—"}
-              </div>
-              <div className="st-n">{s.n}</div>
-            </div>
-          ))}
+          <div className="cd-outcome-list">
+            {["good", "ok", "miss", "bad"].map((r) => {
+              const count = ratingCounts[r] || 0;
+              if (count === 0) return null;
+              const pct = Math.round((count / clubStats.n) * 100);
+              const tone =
+                r === "good"
+                  ? "good"
+                  : r === "ok"
+                  ? "ok"
+                  : "miss";
+              return (
+                <div key={r} className="cd-outcome-row">
+                  <div className={`cd-outcome-label tone-${tone}`}>
+                    {SELF_RATING_LABELS[r]}
+                  </div>
+                  <div className="cd-outcome-bar">
+                    <div
+                      className={`cd-outcome-fill tone-${tone}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className="cd-outcome-count">
+                    {count}回 ({pct}%)
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* v2.1: 打感の分布 */}
+      {contactN > 0 && (
+        <div className="section">
+          <div className="section-head">
+            <div className="section-title">打感の分布（{contactN}回）</div>
+          </div>
+          <div className="cd-outcome-list">
+            {["nice", "duff", "top", "shank"].map((c) => {
+              const count = contactCounts[c] || 0;
+              if (count === 0) return null;
+              const pct = Math.round((count / contactN) * 100);
+              const tone = c === "nice" ? "good" : "miss";
+              return (
+                <div key={c} className="cd-outcome-row">
+                  <div className={`cd-outcome-label tone-${tone}`}>
+                    {CONTACT_LABELS[c]}
+                  </div>
+                  <div className="cd-outcome-bar">
+                    <div
+                      className={`cd-outcome-fill tone-${tone}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className="cd-outcome-count">
+                    {count}回 ({pct}%)
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* メモ一覧 */}
       <div className="section">
         <div className="section-head">
-          <div className="section-title">ライ別距離（FW / ラフ）</div>
+          <div className="section-title">
+            メモ {memoEntries.length > 0 && `(${memoEntries.length})`}
+          </div>
         </div>
-        <div className="lie-grid">
-          {usedClubs
-            .filter((s) => s.fwAvg != null || s.roughAvg != null)
-            .map((s) => (
-              <div key={s.club.id} className="lie-card">
-                <div className="lie-card-club">{s.club.name}</div>
-                <div className="lie-card-row">
-                  <div className="lie-card-label">FW</div>
-                  <div className="lie-card-num">{s.fwAvg ?? "—"}</div>
-                </div>
-                <div className="lie-card-row">
-                  <div className="lie-card-label">ラフ</div>
-                  <div className="lie-card-num rough">{s.roughAvg ?? "—"}</div>
-                </div>
-                {s.fwAvg != null && s.roughAvg != null && (
-                  <div className="lie-card-diff">
-                    差 {Math.round(s.fwAvg - s.roughAvg)} {unit}
+        {memoEntries.length === 0 ? (
+          <div className="cd-memo-empty">
+            このクラブにはメモ付きショットがまだありません
+          </div>
+        ) : (
+          <div className="cd-memo-list">
+            {memoEntries.map((e, i) => {
+              const dist = e.shot.distance != null
+                ? `${e.shot.distance}${unit}`
+                : "—";
+              const sr = getShotSelfRating(e.shot);
+              const oc = getShotOutcome(e.shot);
+              return (
+                <div key={i} className="cd-memo-item">
+                  <div className="cd-memo-meta">
+                    <span className="cd-memo-date">
+                      {e.round.date}
+                    </span>
+                    <span className="cd-memo-loc">
+                      {e.round.venue} · {e.hole.number}H
+                    </span>
+                    <span className="cd-memo-dist">{dist}</span>
+                    {sr && (
+                      <span className={`cd-memo-rating tone-${sr === "good" ? "good" : sr === "ok" ? "ok" : "miss"}`}>
+                        {SELF_RATING_LABELS[sr]}
+                      </span>
+                    )}
+                    {e.shot.contact && (
+                      <span className={`cd-memo-rating tone-${e.shot.contact === "nice" ? "good" : "miss"}`}>
+                        {CONTACT_LABELS[e.shot.contact]}
+                      </span>
+                    )}
+                    {oc && oc !== "in_play" && (
+                      <span className="cd-memo-outcome tone-miss">
+                        {OUTCOME_LABELS[oc]}
+                      </span>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
-        </div>
+                  <div className="cd-memo-text">{e.shot.memo}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
-    </>
+
+      <div style={{ height: "40px" }} />
+    </div>
   );
 }
 
@@ -4685,30 +5156,26 @@ function TendencyTab({ usedClubs, state }) {
     );
   }
 
-  const insights = [];
+  // クラブごとにメッセージを集約（同じクラブで複数の傾向を1行にまとめる）
+  const insightsByClub = new Map(); // key: club.id, value: { club, msgs: [{msg, tone}] }
+  const addInsight = (clubObj, msg, tone) => {
+    if (!insightsByClub.has(clubObj.id)) {
+      insightsByClub.set(clubObj.id, { club: clubObj, msgs: [] });
+    }
+    insightsByClub.get(clubObj.id).msgs.push({ msg, tone });
+  };
+
   dirClubs.forEach((s) => {
     const sr = (s.dir.straight / s.dir.n) * 100;
     const lr = (s.dir.left / s.dir.n) * 100;
     const rr = (s.dir.right / s.dir.n) * 100;
     if (s.dir.n >= 3) {
       if (rr >= 50)
-        insights.push({
-          club: s.club.name,
-          msg: `右に外しやすい（${Math.round(rr)}%）`,
-          tone: "warn",
-        });
+        addInsight(s.club, `右に外しやすい（${Math.round(rr)}%）`, "warn");
       else if (lr >= 50)
-        insights.push({
-          club: s.club.name,
-          msg: `左に外しやすい（${Math.round(lr)}%）`,
-          tone: "warn",
-        });
+        addInsight(s.club, `左に外しやすい（${Math.round(lr)}%）`, "warn");
       else if (sr >= 60)
-        insights.push({
-          club: s.club.name,
-          msg: `安定 ストレート率${Math.round(sr)}%`,
-          tone: "good",
-        });
+        addInsight(s.club, `安定 ストレート率${Math.round(sr)}%`, "good");
     }
   });
   depthClubs.forEach((s) => {
@@ -4716,18 +5183,21 @@ function TendencyTab({ usedClubs, state }) {
     const ov = (s.depth.over / s.depth.n) * 100;
     if (s.depth.n >= 3) {
       if (sh >= 50)
-        insights.push({
-          club: s.club.name,
-          msg: `ショートしがち（${Math.round(sh)}%）`,
-          tone: "warn",
-        });
+        addInsight(s.club, `ショートしがち（${Math.round(sh)}%）`, "warn");
       else if (ov >= 50)
-        insights.push({
-          club: s.club.name,
-          msg: `オーバーしがち（${Math.round(ov)}%）`,
-          tone: "warn",
-        });
+        addInsight(s.club, `オーバーしがち（${Math.round(ov)}%）`, "warn");
     }
+  });
+
+  // クラブごとに1エントリにまとめる
+  // 全部 good なら good、警告が混ざってたら warn
+  const insights = Array.from(insightsByClub.values()).map((entry) => {
+    const hasWarn = entry.msgs.some((m) => m.tone === "warn");
+    return {
+      club: entry.club.name,
+      msgs: entry.msgs.map((m) => m.msg),
+      tone: hasWarn ? "warn" : "good",
+    };
   });
 
   return (
@@ -4748,7 +5218,7 @@ function TendencyTab({ usedClubs, state }) {
             {insights.map((it, i) => (
               <div key={i} className={`insight tone-${it.tone}`}>
                 <span className="insight-club">{it.club}</span>
-                <span className="insight-msg">{it.msg}</span>
+                <span className="insight-msg">{it.msgs.join(" / ")}</span>
               </div>
             ))}
           </div>
@@ -6560,6 +7030,11 @@ function Style() {
       }
       .tag-dir { background: rgba(94,184,255,0.15); color: var(--blue); }
       .tag-depth { background: rgba(255,184,77,0.15); color: var(--amber); }
+      .tag-contact {
+        background: rgba(255, 107, 107, 0.18);
+        color: var(--red);
+        font-weight: 700;
+      }
       .shot-lie {
         font-size: 10px; color: var(--text-dim);
         text-align: right;
@@ -7027,6 +7502,39 @@ function Style() {
       .result-btn.on.tone-miss { background: var(--tone-miss); color: #0a0a0a; }
       .result-btn.on.tone-bad { background: var(--tone-bad); color: #fff; }
 
+      /* v2.1: 打感（contact）チップ */
+      .contact-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+      }
+      .contact-chip {
+        padding: 12px 0;
+        background: var(--bg-2);
+        border: 1px solid var(--border-soft);
+        border-radius: 10px;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text-dim);
+        text-align: center;
+      }
+      .contact-chip:active { transform: scale(0.95); }
+      .contact-chip.on.tone-good {
+        background: var(--green);
+        color: #0a0a0a;
+        border-color: var(--green);
+      }
+      .contact-chip.on.tone-ok {
+        background: var(--tone-ok, #5eb8ff);
+        color: #0a0a0a;
+        border-color: var(--tone-ok, #5eb8ff);
+      }
+      .contact-chip.on.tone-miss {
+        background: var(--amber, #ffb84d);
+        color: #0a0a0a;
+        border-color: var(--amber, #ffb84d);
+      }
+
       /* v2.0: 結果（事実）ボタン */
       .outcome-row {
         display: grid;
@@ -7170,6 +7678,286 @@ function Style() {
       .distance-chart {
         padding: 12px 16px 0;
         display: flex; flex-direction: column; gap: 8px;
+      }
+
+      /* v2.1: ShotTab - クラブリスト */
+      .club-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px 16px 0;
+      }
+      .club-list-item {
+        position: relative;
+        display: block;
+        text-align: left;
+        background: var(--bg-1);
+        border: 1px solid var(--border-soft);
+        border-radius: 12px;
+        padding: 14px;
+        width: 100%;
+        cursor: pointer;
+      }
+      .club-list-item:active {
+        background: var(--bg-2);
+      }
+      .club-list-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 10px;
+      }
+      .club-list-name {
+        font-size: 18px;
+        font-weight: 700;
+      }
+      .club-list-n {
+        font-size: 11px;
+        color: var(--text-faint);
+      }
+      .club-list-stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .club-list-stat {
+        background: var(--bg-2);
+        border-radius: 6px;
+        padding: 6px 8px;
+      }
+      .club-list-stat-label {
+        font-size: 9px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 2px;
+      }
+      .club-list-stat-value {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .club-list-stat-value.small {
+        font-size: 12px;
+      }
+      .club-list-stat-value .num-large {
+        font-size: 16px;
+      }
+      .club-list-stat-value .num-unit {
+        font-size: 10px;
+        color: var(--text-faint);
+        margin-left: 2px;
+      }
+      .club-list-stat-value.miss {
+        color: var(--red);
+      }
+      .club-list-bar {
+        height: 4px;
+        background: var(--bg-2);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      .club-list-bar-fill {
+        height: 100%;
+        background: var(--green);
+      }
+      .club-list-arrow {
+        position: absolute;
+        right: 14px;
+        top: 14px;
+        font-size: 24px;
+        color: var(--text-faint);
+        line-height: 1;
+      }
+
+      /* v2.1: ClubDetailView */
+      .club-detail-stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        padding: 0 16px;
+      }
+      .cd-stat {
+        background: var(--bg-1);
+        border: 1px solid var(--border-soft);
+        border-radius: 10px;
+        padding: 12px;
+      }
+      .cd-stat-label {
+        font-size: 10px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+      }
+      .cd-stat-value {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 18px;
+        font-weight: 700;
+      }
+      .cd-stat-value.small {
+        font-size: 14px;
+      }
+      .cd-stat-value.miss {
+        color: var(--red);
+      }
+      .cd-stat-value .num-large {
+        font-size: 22px;
+      }
+      .cd-stat-value .num-unit {
+        font-size: 11px;
+        color: var(--text-faint);
+        margin-left: 3px;
+      }
+      .cd-lie-row {
+        display: flex;
+        gap: 10px;
+        padding: 0 16px;
+        align-items: center;
+      }
+      .cd-lie-card {
+        flex: 1;
+        background: var(--bg-1);
+        border: 1px solid var(--border-soft);
+        border-radius: 10px;
+        padding: 12px;
+      }
+      .cd-lie-card.rough {
+        background: rgba(255, 184, 77, 0.08);
+        border-color: rgba(255, 184, 77, 0.25);
+      }
+      .cd-lie-label {
+        font-size: 10px;
+        color: var(--text-faint);
+        margin-bottom: 4px;
+      }
+      .cd-lie-num {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .cd-lie-diff {
+        font-size: 11px;
+        color: var(--text-dim);
+        white-space: nowrap;
+      }
+      .cd-segment-bar {
+        display: flex;
+        height: 28px;
+        margin: 0 16px;
+        border-radius: 6px;
+        overflow: hidden;
+        background: var(--bg-2);
+      }
+      .cd-segment {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 700;
+        color: #0a0a0a;
+        white-space: nowrap;
+      }
+      .cd-segment.tone-good { background: var(--green); }
+      .cd-segment.tone-ok { background: var(--tone-ok, #5eb8ff); }
+      .cd-segment.tone-miss { background: var(--amber, #ffb84d); }
+      .cd-outcome-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 0 16px;
+      }
+      .cd-outcome-row {
+        display: grid;
+        grid-template-columns: 70px 1fr 80px;
+        align-items: center;
+        gap: 8px;
+      }
+      .cd-outcome-label {
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .cd-outcome-label.tone-good { color: var(--green); }
+      .cd-outcome-label.tone-ok { color: var(--tone-ok, #5eb8ff); }
+      .cd-outcome-label.tone-miss { color: var(--amber, #ffb84d); }
+      .cd-outcome-bar {
+        height: 12px;
+        background: var(--bg-2);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      .cd-outcome-fill {
+        height: 100%;
+      }
+      .cd-outcome-fill.tone-good { background: var(--green); }
+      .cd-outcome-fill.tone-ok { background: var(--tone-ok, #5eb8ff); }
+      .cd-outcome-fill.tone-miss { background: var(--amber, #ffb84d); }
+      .cd-outcome-count {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        color: var(--text-dim);
+        text-align: right;
+      }
+      .cd-memo-empty {
+        text-align: center;
+        color: var(--text-faint);
+        font-size: 12px;
+        padding: 20px 16px;
+      }
+      .cd-memo-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 0 16px;
+      }
+      .cd-memo-item {
+        background: var(--bg-1);
+        border: 1px solid var(--border-soft);
+        border-radius: 10px;
+        padding: 12px;
+      }
+      .cd-memo-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 6px;
+        align-items: center;
+      }
+      .cd-memo-date {
+        font-size: 11px;
+        color: var(--text-dim);
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .cd-memo-loc {
+        font-size: 11px;
+        color: var(--text-faint);
+      }
+      .cd-memo-dist {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text);
+        background: var(--bg-2);
+        padding: 1px 6px;
+        border-radius: 4px;
+      }
+      .cd-memo-rating, .cd-memo-outcome {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 1px 6px;
+        border-radius: 4px;
+      }
+      .cd-memo-rating.tone-good { background: rgba(182,242,74,0.2); color: var(--green); }
+      .cd-memo-rating.tone-ok { background: rgba(94,184,255,0.2); color: var(--tone-ok, #5eb8ff); }
+      .cd-memo-rating.tone-miss { background: rgba(255,184,77,0.2); color: var(--amber, #ffb84d); }
+      .cd-memo-outcome.tone-miss { background: rgba(255,107,107,0.2); color: var(--red); }
+      .cd-memo-text {
+        font-size: 14px;
+        color: var(--text);
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
       }
       .dchart-row {
         display: grid;
