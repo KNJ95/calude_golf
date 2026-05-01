@@ -4139,17 +4139,16 @@ function ShotEditor({
                 ))}
               </div>
               <div className="wedge-adjust-row">
-                {[-10, 5, 10].map((delta) => (
+                {[-5, -1, 1, 5].map((delta) => (
                   <button
                     key={delta}
                     type="button"
                     className={`wedge-adjust-btn ${
                       delta < 0 ? "minus" : "plus"
                     }`}
-                    disabled={wedgeTargetDistance == null}
                     onClick={() => {
-                      if (wedgeTargetDistance == null) return;
-                      const next = Math.max(0, wedgeTargetDistance + delta);
+                      const cur = wedgeTargetDistance ?? 0;
+                      const next = Math.max(0, cur + delta);
                       setWedgeTargetDistance(next);
                     }}
                   >
@@ -4210,17 +4209,16 @@ function ShotEditor({
                 ))}
               </div>
               <div className="wedge-adjust-row">
-                {[-10, 5, 10].map((delta) => (
+                {[-5, -1, 1, 5].map((delta) => (
                   <button
                     key={delta}
                     type="button"
                     className={`wedge-adjust-btn ${
                       delta < 0 ? "minus" : "plus"
                     }`}
-                    disabled={wedgeDistance == null}
                     onClick={() => {
-                      if (wedgeDistance == null) return;
-                      const next = Math.max(0, wedgeDistance + delta);
+                      const cur = wedgeDistance ?? 0;
+                      const next = Math.max(0, cur + delta);
                       setWedgeDistance(next);
                     }}
                   >
@@ -6331,33 +6329,38 @@ function Style() {
       /* v2.1: ウェッジ距離 ±調整ボタン */
       .wedge-adjust-row {
         display: flex;
-        gap: 8px;
+        gap: 6px;
         margin-top: 8px;
       }
       .wedge-adjust-btn {
         flex: 1;
-        padding: 10px 0;
+        padding: 12px 0;
         background: var(--bg-2);
         border: 1px solid var(--border);
         border-radius: 8px;
         color: var(--text);
-        font-size: 14px;
+        font-size: 16px;
         font-weight: 700;
         font-family: 'JetBrains Mono', monospace;
       }
       .wedge-adjust-btn:active {
         transform: scale(0.95);
       }
-      .wedge-adjust-btn:disabled {
-        opacity: 0.3;
-      }
       .wedge-adjust-btn.minus {
-        color: var(--tone-ok, #5eb8ff);
-        border-color: rgba(94, 184, 255, 0.3);
+        background: rgba(94, 184, 255, 0.28);
+        border-color: rgba(94, 184, 255, 0.75);
+        color: #8fc8ff;
+      }
+      .wedge-adjust-btn.minus:active {
+        background: rgba(94, 184, 255, 0.45);
       }
       .wedge-adjust-btn.plus {
-        color: var(--amber, #ffb84d);
-        border-color: rgba(255, 184, 77, 0.3);
+        background: rgba(255, 184, 77, 0.28);
+        border-color: rgba(255, 184, 77, 0.75);
+        color: #ffd182;
+      }
+      .wedge-adjust-btn.plus:active {
+        background: rgba(255, 184, 77, 0.45);
       }
 
       /* SHEET ACTIONS */
