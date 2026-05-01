@@ -289,12 +289,8 @@ function isShotOffPlay(shot) {
   const o = getShotOutcome(shot);
   return o !== "in_play";
 }
-// 打ち直しフラグ（v2.0で追加、距離分析・ミス率分析から完全除外）
-function isReplay(shot) {
-  return !!shot.isReplay;
-}
-// v2.1: 平均距離からのみ除外（ミス率にはカウント）
-// 「フェアウェイには行ったが想定外の方向」「ギリギリOBではないが酷いショット」など
+// v2.1: 平均距離から除外（ミス率にはカウント）
+// 「フェアウェイには行ったが想定外の方向」「OB等のペナルティ」「打ち直し」「想定外のミス」など
 function isExcludedFromAvg(shot) {
   return !!shot.excludeFromAvg;
 }
@@ -1111,7 +1107,7 @@ function buildRoundReviewPrompt(round, clubs, unit) {
   lines.push("## 全ショット一覧");
   lines.push("");
   lines.push(
-    "| ホール | Par | # | クラブ | 距離 | 打点 | 着地 | 方向 | 距離感 | 自己評価 | 結果 | 打ち直し | メモ |"
+    "| ホール | Par | # | クラブ | 距離 | 打点 | 着地 | 方向 | 距離感 | 自己評価 | 結果 | 平均除外 | メモ |"
   );
   lines.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|");
   round.holes.forEach((h) => {
@@ -1131,7 +1127,7 @@ function buildRoundReviewPrompt(round, clubs, unit) {
         DEPTH_LABELS[s.depth] || "—",
         sr ? SELF_RATING_LABELS[sr] : "—",
         OUTCOME_LABELS[oc] || "—",
-        isReplay(s) ? "✓" : "—",
+        isExcludedFromAvg(s) ? "✓" : "—",
         (s.memo || "").replace(/\|/g, "／").replace(/\n/g, " "),
       ]
         .map((v) => ` ${v} `)
@@ -1152,7 +1148,6 @@ function buildRoundReviewPrompt(round, clubs, unit) {
         (s) =>
           s.distance != null &&
           !isShotOffPlay(s) &&
-          !isReplay(s) &&
           !isExcludedFromAvg(s)
       )
       .map((s) => s.distance);
@@ -1342,11 +1337,10 @@ function computeClubStats(state) {
       h.shots.forEach((s) => {
         if (!byClub[s.clubId]) return;
         byClub[s.clubId].shots.push(s);
-        // 距離分析対象: distance あり、プレー外でない、打ち直しでない、平均除外フラグでない
+        // 距離分析対象: distance あり、プレー外でない、平均除外フラグでない
         if (
           s.distance != null &&
           !isShotOffPlay(s) &&
-          !isReplay(s) &&
           !isExcludedFromAvg(s)
         ) {
           byClub[s.clubId].all.push(s.distance);
@@ -1360,9 +1354,8 @@ function computeClubStats(state) {
   return state.clubs.map((c) => {
     const data = byClub[c.id];
     const all = data.all;
-    // ミス率計算: 打ち直しは完全除外、それ以外は対象
-    const missableShots = data.shots.filter((s) => !isReplay(s));
-    const missCount = missableShots.filter((s) => isMissShot(s)).length;
+    // ミス率計算: 全ショットが対象
+    const missCount = data.shots.filter((s) => isMissShot(s)).length;
     const dirShots = data.shots.filter((s) => s.direction);
     const dir = {
       left: dirShots.filter((s) => s.direction === "left").length,
@@ -1393,8 +1386,8 @@ function computeClubStats(state) {
       roughAvg: data.rough.length
         ? Math.round(data.rough.reduce((a, b) => a + b, 0) / data.rough.length)
         : null,
-      missRate: missableShots.length
-        ? Math.round((missCount / missableShots.length) * 100)
+      missRate: data.shots.length
+        ? Math.round((missCount / data.shots.length) * 100)
         : null,
       dir,
       depth,
@@ -3020,7 +3013,9 @@ function ShotRowInner({ index, shot, clubs, unit, onClick }) {
     <button className="shot-row" onClick={onClick}>
       <div className="shot-num">
         {index}
-        {isReplay(shot) && <span className="shot-replay-badge">↻</span>}
+        {isExcludedFromAvg(shot) && (
+          <span className="shot-replay-badge" title="平均距離から除外">⊘</span>
+        )}
       </div>
       <div className="shot-club">{club?.name || "—"}</div>
       <div className="shot-distance">
