@@ -1395,6 +1395,58 @@ function computeClubStats(state) {
   });
 }
 
+// v2.1: ウェッジ専用統計（コントロールショットの分析）
+function computeWedgeStats(state) {
+  const wedgeClubs = state.clubs.filter((c) => c.category === "wedge");
+  return wedgeClubs.map((c) => {
+    const shots = [];
+    state.rounds.forEach((r) => {
+      r.holes.forEach((h) => {
+        h.shots.forEach((s) => {
+          if (s.clubId === c.id) shots.push(s);
+        });
+      });
+    });
+    // 結果分布
+    const resultCounts = {
+      pin: 0, green: 0, short: 0, over: 0, left: 0, right: 0,
+    };
+    shots.forEach((s) => {
+      if (s.wedgeResult && resultCounts.hasOwnProperty(s.wedgeResult)) {
+        resultCounts[s.wedgeResult]++;
+      }
+    });
+    // 距離（excludeFromAvg なし、wedgeDistance あり）
+    const dists = shots
+      .filter((s) => s.wedgeDistance != null && !isExcludedFromAvg(s))
+      .map((s) => s.wedgeDistance);
+    // ピン/乗 = 寄せ成功
+    const successCount = resultCounts.pin + resultCounts.green;
+    // ミス = ショート/オーバー/左/右、または excludeFromAvg
+    const missCount =
+      resultCounts.short + resultCounts.over + resultCounts.left + resultCounts.right
+      + shots.filter((s) => isExcludedFromAvg(s)).length;
+    return {
+      club: c,
+      n: shots.length,
+      avg: dists.length
+        ? Math.round(dists.reduce((a, b) => a + b, 0) / dists.length)
+        : null,
+      median: dists.length ? Math.round(median(dists)) : null,
+      trimmed: dists.length ? Math.round(trimmedMean(dists)) : null,
+      max: dists.length ? Math.max(...dists) : null,
+      min: dists.length ? Math.min(...dists) : null,
+      resultCounts,
+      successRate: shots.length
+        ? Math.round((successCount / shots.length) * 100)
+        : null,
+      missRate: shots.length
+        ? Math.round((missCount / shots.length) * 100)
+        : null,
+    };
+  });
+}
+
 // ===== ラウンドKPI =====
 function computeRoundKPI(round, clubs) {
   const putterIds = new Set(
@@ -2988,6 +3040,52 @@ function ShotRowInner({ index, shot, clubs, unit, onClick }) {
     );
   }
 
+  // v2.1: ウェッジの場合は専用表示
+  const isWedgeShot = club?.category === "wedge";
+  if (isWedgeShot) {
+    const WEDGE_RESULT_LABELS = {
+      pin: { label: "🎯 ピン", tone: "good" },
+      green: { label: "○ 乗", tone: "ok" },
+      short: { label: "ショート", tone: "miss" },
+      over: { label: "オーバー", tone: "miss" },
+      left: { label: "← 左外し", tone: "miss" },
+      right: { label: "右外し →", tone: "miss" },
+    };
+    const wResult = shot.wedgeResult
+      ? WEDGE_RESULT_LABELS[shot.wedgeResult]
+      : null;
+    return (
+      <button className="shot-row" onClick={onClick}>
+        <div className="shot-num">
+          {index}
+          {isExcludedFromAvg(shot) && (
+            <span className="shot-replay-badge" title="平均距離から除外">⊘</span>
+          )}
+        </div>
+        <div className="shot-club">{club?.name || "—"}</div>
+        <div className="shot-distance">
+          {shot.wedgeDistance != null ? (
+            <>
+              <span className="dist-num">{shot.wedgeDistance}</span>
+              <span className="dist-unit">{unit}</span>
+            </>
+          ) : (
+            <span className="dist-empty">—</span>
+          )}
+        </div>
+        <div className="shot-tendency-tags" />
+        <div className="shot-lie">—</div>
+        <div className="shot-result-cell">
+          {wResult && (
+            <span className={`shot-result tone-${wResult.tone}`}>
+              {wResult.label}
+            </span>
+          )}
+        </div>
+      </button>
+    );
+  }
+
   const sr = getShotSelfRating(shot);
   const oc = getShotOutcome(shot);
   const rating = SELF_RATINGS.find((r) => r.id === sr);
@@ -3078,8 +3176,7 @@ function ShotEditor({
   const [outcome, setOutcome] = useState(
     existing ? getShotOutcome(existing) : "in_play"
   );
-  const [isReplayShot, setIsReplayShot] = useState(!!existing?.isReplay);
-  // v2.1: 平均距離からのみ除外（ミス率にはカウント）
+  // v2.1: 平均距離から除外フラグ（ミス率にはカウント）
   const [excludeFromAvgShot, setExcludeFromAvgShot] = useState(
     !!existing?.excludeFromAvg
   );
@@ -3101,11 +3198,26 @@ function ShotEditor({
   // v2.1: 複数打を一括記録するための打数（編集モードでは1固定、新規追加モードのみ可変）
   const [puttCount, setPuttCount] = useState(1);
 
+  // v2.1: ウェッジ専用 state
+  const [wedgeDistance, setWedgeDistance] = useState(
+    existing?.wedgeDistance ?? null
+  );
+  const [wedgeResult, setWedgeResult] = useState(
+    existing?.wedgeResult || null
+  ); // 'pin' | 'green' | 'over' | 'short' | 'left' | 'right'
+
   // パター専用UIを表示するかどうか
   const isPutter = useMemo(() => {
     if (!clubId) return false;
     const club = clubs.find((c) => c.id === clubId);
     return club?.category === "putter";
+  }, [clubId, clubs]);
+
+  // v2.1: ウェッジ専用UIを表示するかどうか
+  const isWedge = useMemo(() => {
+    if (!clubId) return false;
+    const club = clubs.find((c) => c.id === clubId);
+    return club?.category === "wedge";
   }, [clubId, clubs]);
 
   // 音声入力 state
@@ -3336,14 +3448,6 @@ function ShotEditor({
       }
     }
 
-    // 打ち直し
-    if (!currentValues.isReplay) {
-      if (/打ち直し|打ちなおし|打直し/.test(normalized)) {
-        updates.isReplay = true;
-        matched.isReplay = true;
-      }
-    }
-
     return { updates, matched };
   };
 
@@ -3387,7 +3491,6 @@ function ShotEditor({
         depth,
         selfRating,
         outcome,
-        isReplay: isReplayShot,
       };
       const { updates, matched } = parseTranscript(transcript, currentValues);
 
@@ -3399,7 +3502,6 @@ function ShotEditor({
       if ("depth" in updates) setDepth(updates.depth);
       if ("selfRating" in updates) setSelfRating(updates.selfRating);
       if ("outcome" in updates) setOutcome(updates.outcome);
-      if ("isReplay" in updates) setIsReplayShot(updates.isReplay);
 
       // ハイライト表示（2秒）
       setHighlightFields(matched);
@@ -3519,6 +3621,8 @@ function ShotEditor({
 
   const canSave = isPutter
     ? clubId && puttResult
+    : isWedge
+    ? clubId && wedgeResult
     : clubId && outcome && lie;
 
   return (
@@ -3635,10 +3739,6 @@ function ShotEditor({
                     OB / オービー / ロスト / 紛失 / 赤杭 / 黄杭
                   </div>
                 </div>
-                <div className="voice-help-cat">
-                  <div className="voice-help-cat-name">↻ 打ち直し</div>
-                  <div className="voice-help-words">打ち直し / 打ちなおし</div>
-                </div>
                 <div className="voice-help-note">
                   ⚠️ 既に入力されている項目は音声入力で上書きされません。
                   音声で埋めたい項目はクリアしてからご利用ください。
@@ -3672,7 +3772,7 @@ function ShotEditor({
           </div>
         </div>
 
-        {!isPutter && (
+        {!isPutter && !isWedge && (
           <>
         <div className={`editor-section ${highlightFields.distance ? "highlight" : ""}`}>
           <div className="editor-label">飛距離</div>
@@ -3820,19 +3920,6 @@ function ShotEditor({
           </div>
         </div>
 
-        <div className={`editor-section ${highlightFields.isReplay ? "highlight" : ""}`}>
-          <label className="replay-toggle">
-            <input
-              type="checkbox"
-              checked={isReplayShot}
-              onChange={(e) => setIsReplayShot(e.target.checked)}
-            />
-            <span className="replay-toggle-text">
-              <b>打ち直し</b>（OB等の後の再ショット・距離・ミス率分析から完全除外）
-            </span>
-          </label>
-        </div>
-
         <div className="editor-section">
           <label className="replay-toggle">
             <input
@@ -3841,7 +3928,7 @@ function ShotEditor({
               onChange={(e) => setExcludeFromAvgShot(e.target.checked)}
             />
             <span className="replay-toggle-text">
-              <b>平均距離から除外</b>（ミス率にはカウントする / 自己評価では拾えないミス用）
+              <b>平均距離から除外</b>（ミス率にはカウント / 打ち直し・想定外ミスなど）
             </span>
           </label>
         </div>
@@ -3991,6 +4078,81 @@ function ShotEditor({
           </>
         )}
 
+        {/* v2.1: ウェッジ専用UI（コントロールショット扱い、フルとは区別しない） */}
+        {isWedge && (
+          <>
+            <div className="editor-section">
+              <div className="editor-label">距離（{unit}）</div>
+              <div className="distance-display">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  className="distance-input-large"
+                  value={wedgeDistance ?? ""}
+                  placeholder="50"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setWedgeDistance(v === "" ? null : Number(v));
+                  }}
+                />
+                <span className="distance-unit-large">{unit}</span>
+              </div>
+              <div className="putt-distance-shortcuts">
+                {[20, 30, 50, 70, 90, 110].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    className={`putt-shortcut ${
+                      wedgeDistance === d ? "on" : ""
+                    }`}
+                    onClick={() => setWedgeDistance(d)}
+                  >
+                    {d}{unit}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="editor-section">
+              <div className="editor-label">結果</div>
+              <div className="putt-result-grid">
+                {[
+                  { id: "pin", label: "🎯 ピン", tone: "good" },
+                  { id: "green", label: "○ グリーン乗", tone: "ok" },
+                  { id: "short", label: "↓ ショート", tone: "miss" },
+                  { id: "over", label: "↑ オーバー", tone: "miss" },
+                  { id: "left", label: "← 左外し", tone: "miss" },
+                  { id: "right", label: "→ 右外し", tone: "miss" },
+                ].map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    className={`chip putt-result-chip tone-${r.tone} ${
+                      wedgeResult === r.id ? "on" : ""
+                    }`}
+                    onClick={() => setWedgeResult(r.id)}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="editor-section">
+              <label className="replay-toggle">
+                <input
+                  type="checkbox"
+                  checked={excludeFromAvgShot}
+                  onChange={(e) => setExcludeFromAvgShot(e.target.checked)}
+                />
+                <span className="replay-toggle-text">
+                  <b>平均距離から除外</b>（ミス率にはカウント / 想定外ミスなど）
+                </span>
+              </label>
+            </div>
+          </>
+        )}
+
         <div className="editor-section">
           <div className="editor-label">メモ</div>
           <textarea
@@ -4031,6 +4193,17 @@ function ShotEditor({
                         // v2.1: 複数打を一括記録するための打数（編集モードでは無視）
                         _puttCount: mode === "edit" ? 1 : puttCount,
                       }
+                    : isWedge
+                    ? {
+                        // ウェッジ専用フィールド（コントロールショット扱い）
+                        clubId,
+                        wedgeDistance,
+                        wedgeResult,
+                        memo,
+                        // outcome は in_play 固定（ウェッジは結果をwedgeResultで管理）
+                        outcome: "in_play",
+                        excludeFromAvg: excludeFromAvgShot,
+                      }
                     : {
                         clubId,
                         distance,
@@ -4040,7 +4213,6 @@ function ShotEditor({
                         depth,
                         selfRating,
                         outcome,
-                        isReplay: isReplayShot,
                         excludeFromAvg: excludeFromAvgShot,
                         memo,
                       }
@@ -4080,6 +4252,9 @@ function AnalyticsView({ state, onBack }) {
       s.club.category !== "putter" &&
       s.club.category !== "wedge"
   );
+  // v2.1: ウェッジ専用統計
+  const wedgeStats = useMemo(() => computeWedgeStats(state), [state]);
+  const usedWedges = wedgeStats.filter((s) => s.n > 0);
 
   return (
     <div className="screen">
@@ -4104,6 +4279,12 @@ function AnalyticsView({ state, onBack }) {
           距離
         </button>
         <button
+          className={`atab ${tab === "wedge" ? "on" : ""}`}
+          onClick={() => setTab("wedge")}
+        >
+          ウェッジ
+        </button>
+        <button
           className={`atab ${tab === "tendency" ? "on" : ""}`}
           onClick={() => setTab("tendency")}
         >
@@ -4120,11 +4301,105 @@ function AnalyticsView({ state, onBack }) {
       {tab === "distance" && (
         <DistanceTab usedClubs={usedClubs} unit={state.unit} state={state} />
       )}
+      {tab === "wedge" && (
+        <WedgeTab usedWedges={usedWedges} unit={state.unit} />
+      )}
       {tab === "tendency" && (
         <TendencyTab usedClubs={usedClubs} state={state} />
       )}
       {tab === "rounds" && <RoundsTab state={state} />}
     </div>
+  );
+}
+
+// v2.1: ウェッジ専用タブ
+function WedgeTab({ usedWedges, unit }) {
+  if (usedWedges.length === 0) return <EmptyAnalytics />;
+  return (
+    <>
+      <div className="distance-hint">
+        💡 <b>ウェッジ分析</b>＝コントロールショット（寄せ）の傾向
+        <br />
+        <b>ピン率</b>＝ピン側に寄せた割合 / <b>ミス率</b>＝ショート・オーバー・左右外し・想定外ミスの割合
+        <br />
+        <span className="distance-hint-note">
+          ※ ウェッジは全てコントロールショット扱い。フルショットも記録するならアイアンとして登録してください
+        </span>
+      </div>
+      <div className="section">
+        <div className="section-head">
+          <div className="section-title">クラブ別の傾向</div>
+        </div>
+        <div className="wedge-cards">
+          {usedWedges.map((s) => {
+            const total = s.n;
+            const rc = s.resultCounts;
+            return (
+              <div key={s.club.id} className="wedge-card">
+                <div className="wedge-card-head">
+                  <div className="wedge-card-club">{s.club.name}</div>
+                  <div className="wedge-card-n">{s.n}回</div>
+                </div>
+                <div className="wedge-card-stats">
+                  <div className="wedge-stat">
+                    <div className="wedge-stat-label">平均距離</div>
+                    <div className="wedge-stat-value">
+                      {s.trimmed != null ? `${s.trimmed} ${unit}` : "—"}
+                    </div>
+                  </div>
+                  <div className="wedge-stat">
+                    <div className="wedge-stat-label">レンジ</div>
+                    <div className="wedge-stat-value">
+                      {s.min != null ? `${s.min}–${s.max}` : "—"}
+                    </div>
+                  </div>
+                  <div className="wedge-stat">
+                    <div className="wedge-stat-label">ピン率</div>
+                    <div className="wedge-stat-value good">
+                      {total ? `${Math.round((rc.pin / total) * 100)}%` : "—"}
+                    </div>
+                  </div>
+                  <div className="wedge-stat">
+                    <div className="wedge-stat-label">ミス率</div>
+                    <div
+                      className={`wedge-stat-value ${
+                        s.missRate > 40 ? "miss" : ""
+                      }`}
+                    >
+                      {s.missRate != null ? `${s.missRate}%` : "—"}
+                    </div>
+                  </div>
+                </div>
+                <div className="wedge-result-bar">
+                  {[
+                    { key: "pin", color: "good", label: "ピン" },
+                    { key: "green", color: "ok", label: "乗" },
+                    { key: "short", color: "miss", label: "短" },
+                    { key: "over", color: "miss", label: "長" },
+                    { key: "left", color: "miss", label: "左" },
+                    { key: "right", color: "miss", label: "右" },
+                  ].map((r) => {
+                    const count = rc[r.key];
+                    if (count === 0) return null;
+                    const pct = (count / total) * 100;
+                    return (
+                      <div
+                        key={r.key}
+                        className={`wedge-result-segment tone-${r.color}`}
+                        style={{ width: `${pct}%` }}
+                        title={`${r.label}: ${count}回 (${Math.round(pct)}%)`}
+                      >
+                        {pct > 12 ? `${r.label}${count}` : ""}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -4940,12 +5215,12 @@ function Tutorial({ onClose }) {
             を分けて記録できるので、「ナイスショットなのにOB」も残せます。
           </p>
           <p>
-            OB後の打ち直しは<b>「打ち直し」チェック</b>を入れると、
-            距離分析から自動的に除外されます。
+            想定外のミスは<b>「平均距離から除外」チェック</b>を入れると、
+            平均距離からは外しつつミス率にカウントできます。
           </p>
           <p>
             ホール下部の<b>スコア入力</b>でそのホールの打数を手入力。
-            ペナや打ち直しを含めた正確なスコアを残せます。
+            ペナを含めた正確なスコアを残せます。
           </p>
         </>
       ),
@@ -5781,6 +6056,89 @@ function Style() {
         font-size: 11px;
         color: var(--text-dim);
         line-height: 1.6;
+      }
+
+      /* v2.1: ウェッジ分析タブ */
+      .wedge-cards {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 12px 16px;
+      }
+      .wedge-card {
+        background: var(--bg-1);
+        border: 1px solid var(--border-soft);
+        border-radius: 12px;
+        padding: 14px;
+      }
+      .wedge-card-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 12px;
+      }
+      .wedge-card-club {
+        font-size: 18px;
+        font-weight: 700;
+      }
+      .wedge-card-n {
+        font-size: 12px;
+        color: var(--text-faint);
+      }
+      .wedge-card-stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+      .wedge-stat {
+        background: var(--bg-2);
+        border-radius: 8px;
+        padding: 8px 10px;
+      }
+      .wedge-stat-label {
+        font-size: 10px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 2px;
+      }
+      .wedge-stat-value {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--text);
+      }
+      .wedge-stat-value.good {
+        color: var(--green);
+      }
+      .wedge-stat-value.miss {
+        color: var(--red);
+      }
+      .wedge-result-bar {
+        display: flex;
+        height: 24px;
+        border-radius: 6px;
+        overflow: hidden;
+        background: var(--bg-2);
+      }
+      .wedge-result-segment {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+        font-weight: 700;
+        color: #0a0a0a;
+        white-space: nowrap;
+      }
+      .wedge-result-segment.tone-good {
+        background: var(--green);
+      }
+      .wedge-result-segment.tone-ok {
+        background: var(--tone-ok, #5eb8ff);
+      }
+      .wedge-result-segment.tone-miss {
+        background: var(--amber, #ffb84d);
       }
 
       /* SHEET ACTIONS */
