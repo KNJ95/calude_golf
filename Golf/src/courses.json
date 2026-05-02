@@ -5510,5 +5510,161 @@
         "distance": 310
       }
     ]
+  },
+  {
+    "venue": "東京湾カントリークラブ",
+    "course": "長浦",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 389
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 342
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 373
+      },
+      {
+        "number": 4,
+        "par": 5,
+        "distance": 457
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 142
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 371
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 191
+      },
+      {
+        "number": 8,
+        "par": 5,
+        "distance": 553
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 324
+      }
+    ]
+  },
+  {
+    "venue": "東京湾カントリークラブ",
+    "course": "久保田",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 396
+      },
+      {
+        "number": 2,
+        "par": 3,
+        "distance": 173
+      },
+      {
+        "number": 3,
+        "par": 5,
+        "distance": 509
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 318
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 326
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 351
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 168
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 383
+      },
+      {
+        "number": 9,
+        "par": 5,
+        "distance": 478
+      }
+    ]
+  },
+  {
+    "venue": "東京湾カントリークラブ",
+    "course": "蔵波",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 3,
+        "distance": 153
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 345
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 163
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 339
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 573
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 301
+      },
+      {
+        "number": 7,
+        "par": 5,
+        "distance": 495
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 398
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 375
+      }
+    ]
   }
 ]
