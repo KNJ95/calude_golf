@@ -1414,14 +1414,21 @@ function computeWedgeStats(state) {
         });
       });
     });
-    // 結果分布
+    // 結果分布（v2.1: 配列または文字列の両方に対応）
     const resultCounts = {
       pin: 0, green: 0, short: 0, over: 0, left: 0, right: 0,
     };
     shots.forEach((s) => {
-      if (s.wedgeResult && resultCounts.hasOwnProperty(s.wedgeResult)) {
-        resultCounts[s.wedgeResult]++;
-      }
+      const results = Array.isArray(s.wedgeResult)
+        ? s.wedgeResult
+        : s.wedgeResult
+        ? [s.wedgeResult]
+        : [];
+      results.forEach((r) => {
+        if (resultCounts.hasOwnProperty(r)) {
+          resultCounts[r]++;
+        }
+      });
     });
     // 距離（excludeFromAvg なし、wedgeDistance あり）
     const dists = shots
@@ -1447,12 +1454,30 @@ function computeWedgeStats(state) {
     const signedMean = diffs.length
       ? Math.round(diffs.reduce((sum, d) => sum + d, 0) / diffs.length)
       : null;
-    // ピン/乗 = 寄せ成功
-    const successCount = resultCounts.pin + resultCounts.green;
-    // ミス = ショート/オーバー/左/右、または excludeFromAvg
-    const missCount =
-      resultCounts.short + resultCounts.over + resultCounts.left + resultCounts.right
-      + shots.filter((s) => isExcludedFromAvg(s)).length;
+    // v2.1: ショット単位でカウント（複数結果が選択されていても1ショット=1回として扱う）
+    let successCount = 0;  // ピンorグリーン乗のショット数
+    let missShotsCount = 0;  // ショート/オーバー/左/右のいずれかが選ばれたショット数
+    shots.forEach((s) => {
+      const results = Array.isArray(s.wedgeResult)
+        ? s.wedgeResult
+        : s.wedgeResult
+        ? [s.wedgeResult]
+        : [];
+      // 寄せ成功 = pin or green が1つでも含まれる
+      if (results.includes("pin") || results.includes("green")) {
+        successCount++;
+      }
+      // ミス = short/over/left/right が1つでも含まれる、または excludeFromAvg
+      if (
+        results.includes("short") ||
+        results.includes("over") ||
+        results.includes("left") ||
+        results.includes("right") ||
+        isExcludedFromAvg(s)
+      ) {
+        missShotsCount++;
+      }
+    });
     return {
       club: c,
       n: shots.length,
@@ -1468,7 +1493,7 @@ function computeWedgeStats(state) {
         ? Math.round((successCount / shots.length) * 100)
         : null,
       missRate: shots.length
-        ? Math.round((missCount / shots.length) * 100)
+        ? Math.round((missShotsCount / shots.length) * 100)
         : null,
       // v2.1: 距離精度
       diffN: diffs.length, // サンプル数
@@ -3082,9 +3107,15 @@ function ShotRowInner({ index, shot, clubs, unit, onClick }) {
       left: { label: "← 左外し", tone: "miss" },
       right: { label: "右外し →", tone: "miss" },
     };
-    const wResult = shot.wedgeResult
-      ? WEDGE_RESULT_LABELS[shot.wedgeResult]
-      : null;
+    // v2.1: 配列または文字列（旧データ）の両方に対応
+    const wRawResults = Array.isArray(shot.wedgeResult)
+      ? shot.wedgeResult
+      : shot.wedgeResult
+      ? [shot.wedgeResult]
+      : [];
+    const wResults = wRawResults
+      .map((r) => WEDGE_RESULT_LABELS[r])
+      .filter(Boolean);
     return (
       <button className="shot-row" onClick={onClick}>
         <div className="shot-num">
@@ -3113,10 +3144,17 @@ function ShotRowInner({ index, shot, clubs, unit, onClick }) {
         </div>
         <div className="shot-lie">—</div>
         <div className="shot-result-cell">
-          {wResult && (
-            <span className={`shot-result tone-${wResult.tone}`}>
-              {wResult.label}
-            </span>
+          {wResults.length > 0 && (
+            <div className="shot-result-multi">
+              {wResults.map((wr, i) => (
+                <span
+                  key={i}
+                  className={`shot-result-mini tone-${wr.tone}`}
+                >
+                  {wr.label}
+                </span>
+              ))}
+            </div>
           )}
         </div>
       </button>
@@ -3249,9 +3287,14 @@ function ShotEditor({
   const [wedgeDistance, setWedgeDistance] = useState(
     existing?.wedgeDistance ?? null
   ); // 実際に打った距離
-  const [wedgeResult, setWedgeResult] = useState(
-    existing?.wedgeResult || null
-  ); // 'pin' | 'green' | 'over' | 'short' | 'left' | 'right'
+  // v2.1: ウェッジ結果は配列（複数選択：状態 + 距離 + 方向）
+  // 既存データ（string）との互換のため配列に正規化
+  const [wedgeResults, setWedgeResults] = useState(() => {
+    const r = existing?.wedgeResult;
+    if (Array.isArray(r)) return r;
+    if (typeof r === "string" && r) return [r];
+    return [];
+  }); // (string)[] : ['pin'|'green', 'short'|'over', 'left'|'right'] の最大3要素
 
   // パター専用UIを表示するかどうか
   const isPutter = useMemo(() => {
@@ -3539,33 +3582,44 @@ function ShotEditor({
         }
       }
 
-      // 3. 結果（wedgeResult）の認識
+      // 3. 結果（wedgeResults）の認識
       // 「ピンまで」というキーワードを除去してから判定（pin との誤マッチを防ぐ）
       const resultText = normalized.replace(/ピン\s*まで(?:\s*の?\s*距離)?\s*\d+/g, "");
-      if (!currentValues.wedgeResult) {
-        if (/グリーン乗|グリーンに乗|乗った|乗せた|オン$|オンした/.test(resultText)) {
-          updates.wedgeResult = "green";
-          matched.wedgeResult = true;
-        } else if (/ショート|短かった|届かな/.test(resultText)) {
-          updates.wedgeResult = "short";
-          matched.wedgeResult = true;
-        } else if (/オーバー|長かった|大きすぎ/.test(resultText)) {
-          updates.wedgeResult = "over";
-          matched.wedgeResult = true;
-        } else if (/左外し|左に外|左に逃げ|左にひっか/.test(resultText) ||
-                   /\s左(?:外し|に|だ|だった)/.test(" " + resultText)) {
-          updates.wedgeResult = "left";
-          matched.wedgeResult = true;
-        } else if (/右外し|右に外|右に逃げ|右にすっ/.test(resultText) ||
-                   /\s右(?:外し|に|だ|だった)/.test(" " + resultText)) {
-          updates.wedgeResult = "right";
-          matched.wedgeResult = true;
-        } else if (/カップイン|カップ\s*イン|ホールイン|入った|沈めた/.test(resultText) ||
+      const existingResults = Array.isArray(currentValues.wedgeResults)
+        ? currentValues.wedgeResults
+        : [];
+      if (existingResults.length === 0) {
+        // グループごとに排他的に判定（同グループは1つだけ選ばれる）
+        const newResults = [];
+
+        // 状態グループ: pin / green
+        if (/カップイン|カップ\s*イン|ホールイン|入った|沈めた/.test(resultText) ||
             /ピン$|ピンに|ピン寄|ピン側|ピン近|ピンから/.test(resultText) ||
             /\sピン(?:\s|$)/.test(" " + resultText + " ")) {
-          // カップイン/ピンは最後に判定（他のパターンが優先されるように）
-          updates.wedgeResult = "pin";
-          matched.wedgeResult = true;
+          newResults.push("pin");
+        } else if (/グリーン乗|グリーンに乗|乗った|乗せた|オン$|オンした/.test(resultText)) {
+          newResults.push("green");
+        }
+
+        // 距離グループ: short / over
+        if (/ショート|短かった|届かな/.test(resultText)) {
+          newResults.push("short");
+        } else if (/オーバー|長かった|大きすぎ/.test(resultText)) {
+          newResults.push("over");
+        }
+
+        // 方向グループ: left / right
+        if (/左外し|左に外|左に逃げ|左にひっか/.test(resultText) ||
+            /\s左(?:外し|に|だ|だった)/.test(" " + resultText)) {
+          newResults.push("left");
+        } else if (/右外し|右に外|右に逃げ|右にすっ/.test(resultText) ||
+                   /\s右(?:外し|に|だ|だった)/.test(" " + resultText)) {
+          newResults.push("right");
+        }
+
+        if (newResults.length > 0) {
+          updates.wedgeResults = newResults;
+          matched.wedgeResults = true;
         }
       }
     }
@@ -3636,7 +3690,7 @@ function ShotEditor({
         isWedge,
         wedgeTargetDistance,
         wedgeDistance,
-        wedgeResult,
+        wedgeResults, // 配列で渡す
         // v2.1: 打感（通常クラブ・ウェッジ共通）
         contact,
       };
@@ -3655,7 +3709,7 @@ function ShotEditor({
         setWedgeTargetDistance(updates.wedgeTargetDistance);
       if ("wedgeDistance" in updates)
         setWedgeDistance(updates.wedgeDistance);
-      if ("wedgeResult" in updates) setWedgeResult(updates.wedgeResult);
+      if ("wedgeResults" in updates) setWedgeResults(updates.wedgeResults);
       // v2.1: 打感
       if ("contact" in updates) setContact(updates.contact);
 
@@ -3778,7 +3832,10 @@ function ShotEditor({
   const canSave = isPutter
     ? clubId && puttResult
     : isWedge
-    ? clubId && wedgeResult
+    ? clubId &&
+      (wedgeResults.length > 0 ||
+        wedgeDistance != null ||
+        wedgeTargetDistance != null)
     : clubId && outcome && lie;
 
   return (
@@ -4395,26 +4452,59 @@ function ShotEditor({
             </div>
 
             <div className="editor-section">
-              <div className="editor-label">結果</div>
-              <div className="putt-result-grid">
+              <div className="editor-label">結果（任意・複数選択可）</div>
+              <div className="wedge-result-groups">
                 {[
-                  { id: "pin", label: "🎯 カップイン", tone: "good" },
-                  { id: "green", label: "○ グリーン乗", tone: "ok" },
-                  { id: "short", label: "↓ ショート", tone: "miss" },
-                  { id: "over", label: "↑ オーバー", tone: "miss" },
-                  { id: "left", label: "← 左外し", tone: "miss" },
-                  { id: "right", label: "→ 右外し", tone: "miss" },
-                ].map((r) => (
-                  <button
-                    key={r.id}
-                    type="button"
-                    className={`chip putt-result-chip tone-${r.tone} ${
-                      wedgeResult === r.id ? "on" : ""
-                    }`}
-                    onClick={() => setWedgeResult(r.id)}
-                  >
-                    {r.label}
-                  </button>
+                  {
+                    label: "状態",
+                    options: [
+                      { id: "pin", label: "🎯 カップイン", tone: "good" },
+                      { id: "green", label: "○ グリーン乗", tone: "ok" },
+                    ],
+                  },
+                  {
+                    label: "距離",
+                    options: [
+                      { id: "short", label: "↓ ショート", tone: "miss" },
+                      { id: "over", label: "↑ オーバー", tone: "miss" },
+                    ],
+                  },
+                  {
+                    label: "方向",
+                    options: [
+                      { id: "left", label: "← 左外し", tone: "miss" },
+                      { id: "right", label: "→ 右外し", tone: "miss" },
+                    ],
+                  },
+                ].map((group) => (
+                  <div key={group.label} className="wedge-result-group">
+                    <div className="wedge-result-group-label">
+                      {group.label}
+                    </div>
+                    <div className="wedge-result-group-chips">
+                      {group.options.map((r) => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          className={`chip putt-result-chip tone-${r.tone} ${
+                            wedgeResults.includes(r.id) ? "on" : ""
+                          }`}
+                          onClick={() => {
+                            // 同じグループの他の選択肢を排除しつつトグル
+                            const groupIds = group.options.map((o) => o.id);
+                            const isOn = wedgeResults.includes(r.id);
+                            const next = wedgeResults.filter(
+                              (id) => !groupIds.includes(id)
+                            );
+                            if (!isOn) next.push(r.id);
+                            setWedgeResults(next);
+                          }}
+                        >
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -4503,7 +4593,7 @@ function ShotEditor({
                         clubId,
                         wedgeTargetDistance,
                         wedgeDistance,
-                        wedgeResult,
+                        wedgeResult: wedgeResults, // v2.1: 配列として保存
                         contact,
                         memo,
                         // outcome は in_play 固定（ウェッジは結果をwedgeResultで管理）
@@ -7005,6 +7095,56 @@ function Style() {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
         gap: 6px;
+      }
+      /* v2.1: ウェッジ結果のグループ表示 */
+      .wedge-result-groups {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .wedge-result-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .wedge-result-group-label {
+        font-size: 10px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 600;
+        padding-left: 2px;
+      }
+      .wedge-result-group-chips {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+      }
+      /* v2.1: ショット行の複数結果表示 */
+      .shot-result-multi {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        align-items: flex-end;
+      }
+      .shot-result-mini {
+        font-size: 9px;
+        font-weight: 700;
+        padding: 1px 5px;
+        border-radius: 3px;
+        white-space: nowrap;
+      }
+      .shot-result-mini.tone-good {
+        background: rgba(182, 242, 74, 0.18);
+        color: var(--green);
+      }
+      .shot-result-mini.tone-ok {
+        background: rgba(94, 184, 255, 0.18);
+        color: var(--tone-ok, #5eb8ff);
+      }
+      .shot-result-mini.tone-miss {
+        background: rgba(255, 184, 77, 0.18);
+        color: var(--amber, #ffb84d);
       }
       .putt-result-chip {
         text-align: center;
