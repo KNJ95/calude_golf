@@ -1427,9 +1427,9 @@ function computeWedgeStats(state) {
     const dists = shots
       .filter((s) => s.wedgeDistance != null && !isExcludedFromAvg(s))
       .map((s) => s.wedgeDistance);
-    // v2.1: 狙い vs 実際の差分（精度）
+    // v2.1: ピンまで vs 実際の差分（精度）
     // - excludeFromAvg は除外
-    // - 狙いと実距離の両方が入っているショットだけ対象
+    // - ピンまでと実距離の両方が入っているショットだけ対象
     const diffShots = shots.filter(
       (s) =>
         s.wedgeTargetDistance != null &&
@@ -3075,7 +3075,7 @@ function ShotRowInner({ index, shot, clubs, unit, onClick }) {
   const isWedgeShot = club?.category === "wedge";
   if (isWedgeShot) {
     const WEDGE_RESULT_LABELS = {
-      pin: { label: "🎯 ピン", tone: "good" },
+      pin: { label: "🎯 カップイン", tone: "good" },
       green: { label: "○ 乗", tone: "ok" },
       short: { label: "ショート", tone: "miss" },
       over: { label: "オーバー", tone: "miss" },
@@ -3388,7 +3388,8 @@ function ShotEditor({
     }
 
     // 距離（数字 + ヤード/メートルなど）
-    if (!currentValues.distance) {
+    // v2.1: ウェッジ時は専用フィールド（wedgeTargetDistance/wedgeDistance）を使うので、ここはスキップ
+    if (!currentValues.distance && !currentValues.isWedge) {
       // 度数表記（56度、58°など）を距離抽出から除外
       const distSearchText = normalized
         .replace(/\d+\s*度/g, "")
@@ -3434,7 +3435,8 @@ function ShotEditor({
     }
 
     // 方向
-    if (!currentValues.direction) {
+    // v2.1: ウェッジ時は wedgeResult で左外し/右外しを管理するのでスキップ
+    if (!currentValues.direction && !currentValues.isWedge) {
       if (/フック|左/.test(normalized)) {
         updates.direction = "left";
         matched.direction = true;
@@ -3448,7 +3450,8 @@ function ShotEditor({
     }
 
     // 距離感
-    if (!currentValues.depth) {
+    // v2.1: ウェッジ時は wedgeResult で短/長を管理するのでスキップ
+    if (!currentValues.depth && !currentValues.isWedge) {
       if (/ショート|手前|短/.test(normalized)) {
         updates.depth = "short";
         matched.depth = true;
@@ -3495,6 +3498,97 @@ function ShotEditor({
       }
     }
 
+    // v2.1: ウェッジ専用フィールドの音声認識
+    if (currentValues.isWedge) {
+      // 1. ピンまで距離 + 実距離の抽出
+      // 「ピンまで」「ピンまでの距離」キーワードで分岐
+      // 度数表記（56度、58°など）を除外
+      const wedgeSearchText = normalized
+        .replace(/\d+\s*度/g, "")
+        .replace(/\d+\s*ど(?![くう])/g, "")
+        .replace(/\d+\s*°/g, "");
+
+      // パターン1: 「ピンまで N」を抽出
+      const targetMatch = wedgeSearchText.match(
+        /ピン\s*まで(?:\s*の?\s*距離)?\s*(\d{2,3})/
+      );
+      let targetMatchEnd = -1;
+      if (targetMatch && !currentValues.wedgeTargetDistance) {
+        const n = parseInt(targetMatch[1], 10);
+        if (n >= 5 && n <= 200) {
+          updates.wedgeTargetDistance = n;
+          matched.wedgeTargetDistance = true;
+          targetMatchEnd = targetMatch.index + targetMatch[0].length;
+        }
+      }
+
+      // パターン2: 残りの数字を「実距離」として抽出
+      // 「ピンまで N」のマッチ位置以降のテキストから数字を探す
+      if (!currentValues.wedgeDistance) {
+        const remainingText =
+          targetMatchEnd >= 0
+            ? wedgeSearchText.substring(targetMatchEnd)
+            : wedgeSearchText;
+        const allNums = [...remainingText.matchAll(/(\d{2,3})/g)]
+          .map((m) => parseInt(m[1], 10))
+          .filter((n) => n >= 5 && n <= 200);
+        if (allNums.length > 0) {
+          // 残りのテキストの最初の数字を実距離として採用
+          updates.wedgeDistance = allNums[0];
+          matched.wedgeDistance = true;
+        }
+      }
+
+      // 3. 結果（wedgeResult）の認識
+      // 「ピンまで」というキーワードを除去してから判定（pin との誤マッチを防ぐ）
+      const resultText = normalized.replace(/ピン\s*まで(?:\s*の?\s*距離)?\s*\d+/g, "");
+      if (!currentValues.wedgeResult) {
+        if (/グリーン乗|グリーンに乗|乗った|乗せた|オン$|オンした/.test(resultText)) {
+          updates.wedgeResult = "green";
+          matched.wedgeResult = true;
+        } else if (/ショート|短かった|届かな/.test(resultText)) {
+          updates.wedgeResult = "short";
+          matched.wedgeResult = true;
+        } else if (/オーバー|長かった|大きすぎ/.test(resultText)) {
+          updates.wedgeResult = "over";
+          matched.wedgeResult = true;
+        } else if (/左外し|左に外|左に逃げ|左にひっか/.test(resultText) ||
+                   /\s左(?:外し|に|だ|だった)/.test(" " + resultText)) {
+          updates.wedgeResult = "left";
+          matched.wedgeResult = true;
+        } else if (/右外し|右に外|右に逃げ|右にすっ/.test(resultText) ||
+                   /\s右(?:外し|に|だ|だった)/.test(" " + resultText)) {
+          updates.wedgeResult = "right";
+          matched.wedgeResult = true;
+        } else if (/カップイン|カップ\s*イン|ホールイン|入った|沈めた/.test(resultText) ||
+            /ピン$|ピンに|ピン寄|ピン側|ピン近|ピンから/.test(resultText) ||
+            /\sピン(?:\s|$)/.test(" " + resultText + " ")) {
+          // カップイン/ピンは最後に判定（他のパターンが優先されるように）
+          updates.wedgeResult = "pin";
+          matched.wedgeResult = true;
+        }
+      }
+    }
+
+    // v2.1: 打感（contact）の認識（通常クラブ・ウェッジ共通）
+    if (!currentValues.contact) {
+      if (/ナイス\s*ショット|ナイスショ|ナイスon|ナイスです|^ナイス$|ナイスでした|ナイス$/.test(normalized) ||
+          /\sナイス(?:\s|$)/.test(" " + normalized + " ")) {
+        updates.contact = "nice";
+        matched.contact = true;
+      } else if (/ダフリ|ダフ|ダフった|ダフって/.test(normalized)) {
+        updates.contact = "duff";
+        matched.contact = true;
+      } else if (/トップ\s*した|トップ$|トップって|^トップ$|トップに/.test(normalized) ||
+                 /\sトップ(?:\s|$)/.test(" " + normalized + " ")) {
+        updates.contact = "top";
+        matched.contact = true;
+      } else if (/シャンク/.test(normalized)) {
+        updates.contact = "shank";
+        matched.contact = true;
+      }
+    }
+
     return { updates, matched };
   };
 
@@ -3538,6 +3632,13 @@ function ShotEditor({
         depth,
         selfRating,
         outcome,
+        // v2.1: ウェッジ専用フィールド
+        isWedge,
+        wedgeTargetDistance,
+        wedgeDistance,
+        wedgeResult,
+        // v2.1: 打感（通常クラブ・ウェッジ共通）
+        contact,
       };
       const { updates, matched } = parseTranscript(transcript, currentValues);
 
@@ -3549,6 +3650,14 @@ function ShotEditor({
       if ("depth" in updates) setDepth(updates.depth);
       if ("selfRating" in updates) setSelfRating(updates.selfRating);
       if ("outcome" in updates) setOutcome(updates.outcome);
+      // v2.1: ウェッジ専用
+      if ("wedgeTargetDistance" in updates)
+        setWedgeTargetDistance(updates.wedgeTargetDistance);
+      if ("wedgeDistance" in updates)
+        setWedgeDistance(updates.wedgeDistance);
+      if ("wedgeResult" in updates) setWedgeResult(updates.wedgeResult);
+      // v2.1: 打感
+      if ("contact" in updates) setContact(updates.contact);
 
       // ハイライト表示（2秒）
       setHighlightFields(matched);
@@ -3784,6 +3893,20 @@ function ShotEditor({
                   <div className="voice-help-cat-name">🚩 結果</div>
                   <div className="voice-help-words">
                     OB / オービー / ロスト / 紛失 / 赤杭 / 黄杭
+                  </div>
+                </div>
+                <div className="voice-help-cat">
+                  <div className="voice-help-cat-name">💥 打感</div>
+                  <div className="voice-help-words">
+                    ナイス / ダフリ / ダフった / トップ / シャンク
+                  </div>
+                </div>
+                <div className="voice-help-cat">
+                  <div className="voice-help-cat-name">🎯 ウェッジ専用</div>
+                  <div className="voice-help-words">
+                    距離: 「<b>ピンまで</b> 50ヤード 55ヤード」<br />
+                    （「ピンまで」キーワード = ピンまで距離、もう一つの数字 = 実距離）<br />
+                    結果: カップイン / 乗った / ショート / オーバー / 左外し / 右外し
                   </div>
                 </div>
                 <div className="voice-help-note">
@@ -4152,7 +4275,7 @@ function ShotEditor({
         {isWedge && (
           <>
             <div className="editor-section">
-              <div className="editor-label">狙い距離（{unit}）</div>
+              <div className="editor-label">ピンまで（{unit}）</div>
               <div className="distance-display">
                 <input
                   type="number"
@@ -4275,7 +4398,7 @@ function ShotEditor({
               <div className="editor-label">結果</div>
               <div className="putt-result-grid">
                 {[
-                  { id: "pin", label: "🎯 ピン", tone: "good" },
+                  { id: "pin", label: "🎯 カップイン", tone: "good" },
                   { id: "green", label: "○ グリーン乗", tone: "ok" },
                   { id: "short", label: "↓ ショート", tone: "miss" },
                   { id: "over", label: "↑ オーバー", tone: "miss" },
@@ -4539,9 +4662,9 @@ function WedgeTab({ usedWedges, unit }) {
       <div className="distance-hint">
         💡 <b>ウェッジ分析</b>＝コントロールショット（寄せ）の傾向
         <br />
-        <b>ピン率</b>＝ピン側に寄せた割合 / <b>ミス率</b>＝ショート・オーバー・左右外し・想定外ミスの割合
+        <b>カップイン率</b>＝カップインに収まった割合 / <b>ミス率</b>＝ショート・オーバー・左右外し・想定外ミスの割合
         <br />
-        <b>距離精度</b>＝狙い距離と実距離の差（絶対誤差で精度、符号付き平均で長め/短めのクセ）
+        <b>距離精度</b>＝ピンまで距離と実距離の差（絶対誤差で精度、符号付き平均で長め/短めのクセ）
         <br />
         <span className="distance-hint-note">
           ※ ウェッジは全てコントロールショット扱い。フルショットも記録するならアイアンとして登録してください
@@ -4587,7 +4710,7 @@ function WedgeTab({ usedWedges, unit }) {
                     </div>
                   </div>
                   <div className="wedge-stat">
-                    <div className="wedge-stat-label">ピン率</div>
+                    <div className="wedge-stat-label">カップイン率</div>
                     <div className="wedge-stat-value good">
                       {total ? `${Math.round((rc.pin / total) * 100)}%` : "—"}
                     </div>
@@ -4602,7 +4725,7 @@ function WedgeTab({ usedWedges, unit }) {
                       {s.missRate != null ? `${s.missRate}%` : "—"}
                     </div>
                   </div>
-                  {/* v2.1: 狙い vs 実距離の精度（データがある時のみ表示） */}
+                  {/* v2.1: ピンまで vs 実距離の精度（データがある時のみ表示） */}
                   {s.diffN > 0 && (
                     <>
                       <div className="wedge-stat">
@@ -4634,7 +4757,7 @@ function WedgeTab({ usedWedges, unit }) {
                 </div>
                 <div className="wedge-result-bar">
                   {[
-                    { key: "pin", color: "good", label: "ピン" },
+                    { key: "pin", color: "good", label: "IN" },
                     { key: "green", color: "ok", label: "乗" },
                     { key: "short", color: "miss", label: "短" },
                     { key: "over", color: "miss", label: "長" },
