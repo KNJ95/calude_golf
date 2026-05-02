@@ -1114,26 +1114,69 @@ function buildRoundReviewPrompt(round, clubs, unit) {
   lines.push("## 全ショット一覧");
   lines.push("");
   lines.push(
-    "| ホール | Par | # | クラブ | 距離 | 打点 | 着地 | 方向 | 距離感 | 自己評価 | 結果 | 平均除外 | メモ |"
+    "| ホール | Par | # | クラブ | 距離 | 打点 | 着地 | 方向 | 距離感 | 自己評価 | 打感 | 結果 | 平均除外 | メモ |"
   );
-  lines.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+  lines.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
   round.holes.forEach((h) => {
     h.shots.forEach((s, i) => {
       const club = clubMap[s.clubId]?.name || "—";
       const sr = getShotSelfRating(s);
       const oc = getShotOutcome(s);
+      const clubObj = clubMap[s.clubId];
+      const isPutterShot = clubObj?.category === "putter";
+      const isWedgeShot = clubObj?.category === "wedge";
+
+      // 距離: 通常クラブ→s.distance、パター→puttDistance(m), ウェッジ→「狙いNyd→実Nyd」
+      let distCol = "—";
+      if (isPutterShot && s.puttDistance != null) {
+        distCol = `${s.puttDistance}m`;
+      } else if (isWedgeShot) {
+        const t = s.wedgeTargetDistance;
+        const a = s.wedgeDistance;
+        if (t != null && a != null) {
+          const diff = a - t;
+          const sign = diff > 0 ? "+" : "";
+          distCol = `狙${t}→実${a}(${sign}${diff})`;
+        } else if (a != null) {
+          distCol = `${a}${unit}`;
+        } else if (t != null) {
+          distCol = `狙${t}${unit}`;
+        }
+      } else if (s.distance != null) {
+        distCol = `${s.distance}${unit}`;
+      }
+
+      // 結果: ウェッジ→配列ラベル、パター→puttResult、通常→outcome
+      let resultCol = OUTCOME_LABELS[oc] || "—";
+      if (isPutterShot && s.puttResult) {
+        const PUTT_LBL = {
+          in: "🎯IN", ok: "OK", short: "短", over: "長", left: "左", right: "右",
+        };
+        resultCol = PUTT_LBL[s.puttResult] || "—";
+      } else if (isWedgeShot) {
+        const arr = Array.isArray(s.wedgeResult)
+          ? s.wedgeResult
+          : s.wedgeResult ? [s.wedgeResult] : [];
+        const W_LBL = {
+          pin: "カップイン", green: "乗", short: "短", over: "長", left: "左外し", right: "右外し",
+        };
+        const labels = arr.map((r) => W_LBL[r]).filter(Boolean);
+        resultCol = labels.length > 0 ? labels.join("+") : "—";
+      }
+
       const row = [
         h.number,
         h.par,
         i + 1,
         club,
-        s.distance != null ? `${s.distance}${unit}` : "—",
+        distCol,
         LIE_LABELS[s.lie] || "—",
         LIE_LABELS[s.nextLie] || "—",
         DIR_LABELS[s.direction] || "—",
         DEPTH_LABELS[s.depth] || "—",
         sr ? SELF_RATING_LABELS[sr] : "—",
-        OUTCOME_LABELS[oc] || "—",
+        s.contact ? CONTACT_LABELS[s.contact] : "—",
+        resultCol,
         isExcludedFromAvg(s) ? "✓" : "—",
         (s.memo || "").replace(/\|/g, "／").replace(/\n/g, " "),
       ]
@@ -1185,6 +1228,119 @@ function buildRoundReviewPrompt(round, clubs, unit) {
     parts.push(`ミス率${Math.round((miss / shots.length) * 100)}%`);
     lines.push(`- **${c.name}**: ${parts.join(" / ")}`);
   });
+
+  // v2.1: ウェッジ集計（このラウンド）
+  const wedgeShotsByClub = {};
+  Object.entries(byClub).forEach(([cid, shots]) => {
+    const c = clubMap[cid];
+    if (c?.category === "wedge") {
+      wedgeShotsByClub[cid] = { club: c, shots };
+    }
+  });
+  const wedgeKeys = Object.keys(wedgeShotsByClub);
+  if (wedgeKeys.length > 0) {
+    lines.push("");
+    lines.push("## ウェッジ（コントロールショット、本ラウンド）");
+    lines.push("");
+    wedgeKeys.forEach((cid) => {
+      const { club, shots } = wedgeShotsByClub[cid];
+      // 結果を集計
+      const rc = { pin: 0, green: 0, short: 0, over: 0, left: 0, right: 0 };
+      shots.forEach((s) => {
+        const arr = Array.isArray(s.wedgeResult)
+          ? s.wedgeResult
+          : s.wedgeResult ? [s.wedgeResult] : [];
+        arr.forEach((r) => {
+          if (rc.hasOwnProperty(r)) rc[r]++;
+        });
+      });
+      // 距離精度
+      const diffs = shots
+        .filter(
+          (s) =>
+            s.wedgeTargetDistance != null &&
+            s.wedgeDistance != null &&
+            !isExcludedFromAvg(s)
+        )
+        .map((s) => s.wedgeDistance - s.wedgeTargetDistance);
+      const parts = [`${shots.length}回`];
+      if (diffs.length > 0) {
+        const absMean = Math.round(
+          diffs.reduce((sum, d) => sum + Math.abs(d), 0) / diffs.length
+        );
+        const signedMean = Math.round(
+          diffs.reduce((sum, d) => sum + d, 0) / diffs.length
+        );
+        parts.push(
+          `精度±${absMean}${unit} / クセ${
+            signedMean > 0 ? "+" : ""
+          }${signedMean}${unit}`
+        );
+      }
+      // 結果分布（0回のものはスキップ）
+      const resultStrs = [];
+      if (rc.pin) resultStrs.push(`カップイン${rc.pin}`);
+      if (rc.green) resultStrs.push(`乗${rc.green}`);
+      if (rc.short) resultStrs.push(`短${rc.short}`);
+      if (rc.over) resultStrs.push(`長${rc.over}`);
+      if (rc.left) resultStrs.push(`左${rc.left}`);
+      if (rc.right) resultStrs.push(`右${rc.right}`);
+      if (resultStrs.length > 0) parts.push(resultStrs.join("/"));
+      lines.push(`- **${club.name}**: ${parts.join(" / ")}`);
+    });
+  }
+
+  // v2.1: 打感集計（このラウンド、全クラブ横断）
+  const contactCounts = { nice: 0, duff: 0, top: 0, shank: 0 };
+  let contactN = 0;
+  Object.values(byClub).forEach((shots) => {
+    shots.forEach((s) => {
+      if (s.contact && contactCounts.hasOwnProperty(s.contact)) {
+        contactCounts[s.contact]++;
+        contactN++;
+      }
+    });
+  });
+  if (contactN > 0) {
+    lines.push("");
+    lines.push("## 打感（本ラウンド）");
+    lines.push("");
+    const cParts = [];
+    if (contactCounts.nice)
+      cParts.push(`ナイス${contactCounts.nice}`);
+    if (contactCounts.duff)
+      cParts.push(`ダフリ${contactCounts.duff}`);
+    if (contactCounts.top)
+      cParts.push(`トップ${contactCounts.top}`);
+    if (contactCounts.shank)
+      cParts.push(`シャンク${contactCounts.shank}`);
+    lines.push(`- 全${contactN}回: ${cParts.join(" / ")}`);
+    // ミスショット（duff/top/shank）が出たクラブを列挙
+    const missContactByClub = {};
+    Object.entries(byClub).forEach(([cid, shots]) => {
+      const c = clubMap[cid];
+      if (!c) return;
+      shots.forEach((s) => {
+        if (s.contact && s.contact !== "nice") {
+          if (!missContactByClub[c.name]) missContactByClub[c.name] = {};
+          const m = missContactByClub[c.name];
+          m[s.contact] = (m[s.contact] || 0) + 1;
+        }
+      });
+    });
+    if (Object.keys(missContactByClub).length > 0) {
+      lines.push("");
+      lines.push("ミス系打感のクラブ別内訳:");
+      Object.entries(missContactByClub).forEach(([name, counts]) => {
+        const ps = [];
+        if (counts.duff) ps.push(`ダフリ${counts.duff}`);
+        if (counts.top) ps.push(`トップ${counts.top}`);
+        if (counts.shank) ps.push(`シャンク${counts.shank}`);
+        lines.push(`- ${name}: ${ps.join("/")}`);
+      });
+    }
+  }
+
   return lines.join("\n");
 }
 
@@ -1265,6 +1421,107 @@ function buildIssueAnalysisPrompt(state) {
     });
     lines.push("");
   }
+
+  // v2.1: ウェッジパフォーマンス（コントロールショット、累積）
+  const wedgeStats = computeWedgeStats(state).filter((s) => s.n > 0);
+  if (wedgeStats.length > 0) {
+    lines.push("## ウェッジパフォーマンス（コントロールショット）");
+    lines.push("");
+    lines.push(
+      "| クラブ | 平均距離 | レンジ | カップイン率 | ミス率 | 距離精度(±) | クセ | 結果分布(IN/乗/短/長/左/右) | n |"
+    );
+    lines.push("|---|---|---|---|---|---|---|---|---|");
+    wedgeStats.forEach((s) => {
+      const rc = s.resultCounts;
+      const distribution = `${rc.pin}/${rc.green}/${rc.short}/${rc.over}/${rc.left}/${rc.right}`;
+      const accuracy =
+        s.diffN > 0 ? `±${s.absMeanDiff}${state.unit}(n=${s.diffN})` : "—";
+      const tendency =
+        s.signedMeanDiff != null
+          ? s.signedMeanDiff > 0
+            ? `+${s.signedMeanDiff}長め`
+            : s.signedMeanDiff < 0
+            ? `${s.signedMeanDiff}短め`
+            : "ぴったり"
+          : "—";
+      const cupinRate = s.n
+        ? Math.round((rc.pin / s.n) * 100) + "%"
+        : "—";
+      lines.push(
+        `| ${s.club.name} | ${s.trimmed ?? "—"}${state.unit} | ${
+          s.min != null ? `${s.min}-${s.max}` : "—"
+        } | ${cupinRate} | ${s.missRate ?? "—"}% | ${accuracy} | ${tendency} | ${distribution} | ${s.n} |`
+      );
+    });
+    lines.push("");
+  }
+
+  // v2.1: 打感（ダフリ・トップ・シャンク）の傾向
+  const contactByClub = {};
+  state.rounds.forEach((r) => {
+    r.holes.forEach((h) => {
+      h.shots.forEach((s) => {
+        if (!s.contact) return;
+        if (!contactByClub[s.clubId]) {
+          contactByClub[s.clubId] = {
+            nice: 0, duff: 0, top: 0, shank: 0, total: 0,
+          };
+        }
+        if (contactByClub[s.clubId].hasOwnProperty(s.contact)) {
+          contactByClub[s.clubId][s.contact]++;
+          contactByClub[s.clubId].total++;
+        }
+      });
+    });
+  });
+  const contactClubs = Object.entries(contactByClub)
+    .map(([cid, c]) => {
+      const club = state.clubs.find((x) => x.id === cid);
+      return club ? { club, ...c } : null;
+    })
+    .filter((x) => x !== null && x.total > 0);
+  if (contactClubs.length > 0) {
+    lines.push("## 打感の傾向（クラブ別）");
+    lines.push("");
+    lines.push("| クラブ | ナイス | ダフリ | トップ | シャンク | n |");
+    lines.push("|---|---|---|---|---|---|");
+    contactClubs.forEach((c) => {
+      lines.push(
+        `| ${c.club.name} | ${c.nice} | ${c.duff} | ${c.top} | ${c.shank} | ${c.total} |`
+      );
+    });
+    lines.push("");
+  }
+
+  // v2.1: メモから定性的な気づき（最新20件）
+  const memoEntries = [];
+  state.rounds.forEach((r) => {
+    r.holes.forEach((h) => {
+      h.shots.forEach((s) => {
+        if (s.memo && s.memo.trim() !== "") {
+          const club = state.clubs.find((c) => c.id === s.clubId);
+          memoEntries.push({
+            date: r.date,
+            club: club?.name || "—",
+            memo: s.memo.trim(),
+          });
+        }
+      });
+    });
+  });
+  // 新しい順（簡易）
+  memoEntries.reverse();
+  const recentMemos = memoEntries.slice(0, 20);
+  if (recentMemos.length > 0) {
+    lines.push("## 最近のショットメモ（最新20件、定性的気づき）");
+    lines.push("");
+    recentMemos.forEach((m) => {
+      const memoText = m.memo.replace(/\n/g, " ");
+      lines.push(`- ${m.date} ${m.club}: 「${memoText}」`);
+    });
+    lines.push("");
+  }
+
   return lines.join("\n");
 }
 
@@ -1330,6 +1587,39 @@ function buildClubDistancePrompt(state) {
       } |`
     );
   });
+
+  // v2.1: ウェッジ（コントロールショット）の距離感
+  const wedgeStats = computeWedgeStats(state).filter((s) => s.n > 0);
+  if (wedgeStats.length > 0) {
+    lines.push("");
+    lines.push(`## ウェッジ実戦距離（コントロールショット、単位: ${state.unit}）`);
+    lines.push("");
+    lines.push(
+      "| クラブ | 平均距離 | レンジ | カップイン率 | 距離精度(±) | クセ | n |"
+    );
+    lines.push("|---|---|---|---|---|---|---|");
+    wedgeStats.forEach((s) => {
+      const cupinRate = s.n
+        ? Math.round((s.resultCounts.pin / s.n) * 100) + "%"
+        : "—";
+      const accuracy =
+        s.diffN > 0 ? `±${s.absMeanDiff}(n=${s.diffN})` : "—";
+      const tendency =
+        s.signedMeanDiff != null
+          ? s.signedMeanDiff > 0
+            ? `+${s.signedMeanDiff}長め`
+            : s.signedMeanDiff < 0
+            ? `${s.signedMeanDiff}短め`
+            : "ぴったり"
+          : "—";
+      lines.push(
+        `| ${s.club.name} | ${s.trimmed ?? "—"} | ${
+          s.min != null ? `${s.min}-${s.max}` : "—"
+        } | ${cupinRate} | ${accuracy} | ${tendency} | ${s.n} |`
+      );
+    });
+  }
+
   return lines.join("\n");
 }
 
