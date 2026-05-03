@@ -8526,7 +8526,7 @@ function Style() {
         -webkit-backdrop-filter: blur(12px);
         backdrop-filter: blur(12px);
         border-top: 1px solid var(--border-soft);
-        padding: 10px 14px;
+        padding: 10px 8px;
         z-index: 7;
       }
       @media (min-width: 600px) {
@@ -8535,31 +8535,31 @@ function Style() {
       .score-input-bar-row {
         display: flex;
         align-items: center;
-        gap: 7px;
+        gap: 4px;
         flex-wrap: nowrap;
         justify-content: center;
       }
       .score-input-bar-label {
-        font-size: 16px;
+        font-size: 14px;
         color: var(--text-faint);
         font-weight: 700;
         letter-spacing: 0;
-        min-width: 14px;
+        min-width: 12px;
         text-align: center;
       }
       .score-input-bar-divider {
         width: 1px;
         height: 24px;
         background: var(--border-soft);
-        margin: 0 4px;
+        margin: 0 2px;
       }
       .score-diff {
         font-family: 'JetBrains Mono', monospace;
-        font-size: 13px;
+        font-size: 11px;
         font-weight: 700;
-        padding: 3px 7px;
-        border-radius: 5px;
-        margin-left: 2px;
+        padding: 2px 5px;
+        border-radius: 4px;
+        margin-left: 0;
       }
       .score-diff.tone-great {
         background: var(--green);
@@ -8584,7 +8584,7 @@ function Style() {
       .score-step-btn {
         flex: 0 0 auto;
         background: var(--bg-2);
-        border-radius: 8px;
+        border-radius: 7px;
         font-weight: 700;
         color: var(--text);
       }
@@ -8595,25 +8595,26 @@ function Style() {
         opacity: 0.3;
       }
       .score-step-btn.small {
-        width: 36px;
+        width: 30px;
         height: 36px;
-        font-size: 19px;
+        font-size: 17px;
+        padding: 0;
       }
       .score-input-num {
         flex: 0 0 auto;
         text-align: center;
         background: var(--bg-2);
         border: 1px solid var(--border);
-        border-radius: 8px;
+        border-radius: 7px;
         color: var(--text);
         font-family: 'JetBrains Mono', monospace;
         font-weight: 700;
         outline: none;
       }
       .score-input-num.small {
-        width: 53px;
+        width: 42px;
         height: 36px;
-        font-size: 18px;
+        font-size: 17px;
         padding: 0;
       }
       .score-input-num:focus {
