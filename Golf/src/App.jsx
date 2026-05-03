@@ -2301,6 +2301,42 @@ function HomeView({
   // スワイプで開いているカードのID（同時に複数開かない）
   const [swipedId, setSwipedId] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  // v2.2: ラウンドカードをタップ時、編集シートを表示し、閉じる時にラウンド画面へ
+  const [editingRound, setEditingRound] = useState(null);
+
+  // 編集シートで保存された時：メタ情報を更新してラウンド画面へ遷移
+  const handleEditSave = (updates) => {
+    if (!editingRound) return;
+    setState((s) => ({
+      ...s,
+      rounds: s.rounds.map((r) =>
+        r.id === editingRound.id
+          ? {
+              ...r,
+              date: updates.date,
+              venue: updates.venue,
+              frontCourse: updates.frontCourse,
+              backCourse: updates.backCourse,
+              course: updates.course,
+              tee: updates.tee,
+              weather: updates.weather,
+              // holes（ショット・スコア）はそのまま維持
+            }
+          : r
+      ),
+    }));
+    const targetId = editingRound.id;
+    setEditingRound(null);
+    onOpenRound(targetId);
+  };
+
+  // 編集シートをキャンセル時：編集なしでラウンド画面へ遷移
+  const handleEditCancel = () => {
+    if (!editingRound) return;
+    const targetId = editingRound.id;
+    setEditingRound(null);
+    onOpenRound(targetId);
+  };
 
   const deleteRound = (id) => {
     setState((s) => ({
@@ -2377,7 +2413,7 @@ function HomeView({
                   isSwipedOpen={swipedId === r.id}
                   onSwipeOpen={() => setSwipedId(r.id)}
                   onSwipeClose={() => setSwipedId(null)}
-                  onTap={() => onOpenRound(r.id)}
+                  onTap={() => setEditingRound(r)}
                   onDeleteClick={() => setConfirmDeleteId(r.id)}
                 />
               );
@@ -2391,6 +2427,15 @@ function HomeView({
           courseMasters={state.courseMasters || []}
           onCancel={() => setShowNew(false)}
           onStart={startRound}
+        />
+      )}
+
+      {editingRound && (
+        <NewRoundSheet
+          courseMasters={state.courseMasters || []}
+          existing={editingRound}
+          onCancel={handleEditCancel}
+          onStart={handleEditSave}
         />
       )}
 
@@ -8365,15 +8410,17 @@ function Style() {
       }
       .shot-row {
         display: grid;
-        grid-template-columns: 28px 50px 70px 1fr 56px 36px;
+        grid-template-columns: 24px 42px 60px 1fr 44px 36px;
         align-items: center;
-        gap: 8px;
-        padding: 10px 12px;
+        gap: 6px;
+        padding: 10px 10px;
         background: var(--bg-1);
         border-radius: 10px;
         border: 1px solid var(--border-soft);
         text-align: left;
         width: 100%;
+        min-width: 0;
+        overflow: hidden;
       }
       .shot-num {
         font-family: 'JetBrains Mono', monospace;
@@ -8381,6 +8428,9 @@ function Style() {
       }
       .shot-club {
         font-weight: 700; font-size: 13px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .shot-distance .dist-num {
         font-family: 'JetBrains Mono', monospace;
@@ -8391,7 +8441,17 @@ function Style() {
       }
       .shot-distance .dist-empty { color: var(--text-faint); font-size: 13px; }
       .shot-tendency-tags {
-        display: flex; gap: 4px; flex-wrap: wrap;
+        display: flex;
+        gap: 3px;
+        flex-direction: column;
+        align-items: flex-start;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .shot-tendency-tags .tag {
+        font-size: 10px;
+        white-space: nowrap;
+        max-width: 100%;
       }
       .tag {
         font-size: 9px;
