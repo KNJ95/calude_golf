@@ -3897,6 +3897,12 @@ function ShotEditor({
   const [showVoiceHelp, setShowVoiceHelp] = useState(false); // 認識可能ワード一覧の展開
   const recognitionRef = useRef(null);
 
+  // v3: 対話音声入力 state
+  const [chatVoiceMode, setChatVoiceMode] = useState(false); // 対話モードのオン/オフ
+  const [chatMessages, setChatMessages] = useState([]); // {role: 'ai'|'user', text: string, timestamp: number}[]
+  const [chatVoiceState, setChatVoiceState] = useState("idle"); // idle|listening|processing
+  const chatRecognitionRef = useRef(null);
+
   // 音声認識API対応チェック
   const speechSupported = useMemo(() => {
     return (
@@ -4225,6 +4231,295 @@ function ShotEditor({
     return { updates, matched };
   };
 
+  // v3: 対話音声 - 必要項目の判定
+  // 通常クラブ・ウェッジ別に不足項目を返す
+  const getMissingFields = () => {
+    const missing = [];
+    if (!clubId) {
+      missing.push({
+        key: "clubId",
+        question: "🤖 どのクラブで打ちましたか？",
+        required: true,
+      });
+    }
+    // クラブ確定後でないと、後続の必須/任意の判定ができないので一度ここで止める
+    if (!clubId) return missing;
+
+    const club = clubs.find((c) => c.id === clubId);
+    const isW = club?.category === "wedge";
+    const isP = club?.category === "putter";
+
+    if (isP) {
+      // パターは現状の対話モードでは扱わない（既存UIに誘導）
+      return [];
+    }
+
+    if (isW) {
+      // ウェッジ
+      if (wedgeTargetDistance == null) {
+        missing.push({
+          key: "wedgeTargetDistance",
+          question: "🤖 ピンまでの距離は？",
+          required: true,
+        });
+      }
+      if (wedgeDistance == null) {
+        missing.push({
+          key: "wedgeDistance",
+          question: "🤖 実際に飛んだ距離は？",
+          required: true,
+        });
+      }
+      if (wedgeResults.length === 0) {
+        missing.push({
+          key: "wedgeResults",
+          question:
+            "🤖 結果は？（カップイン/グリーン乗/ショート/オーバー/左外し/右外し）",
+          required: false,
+        });
+      }
+      if (!contact) {
+        missing.push({
+          key: "contact",
+          question: "🤖 打感は？（ナイス/ダフリ/トップ/シャンク・スキップ可）",
+          required: false,
+        });
+      }
+    } else {
+      // 通常クラブ
+      if (distance == null) {
+        missing.push({
+          key: "distance",
+          question: "🤖 距離は何ヤードでしたか？",
+          required: true,
+        });
+      }
+      if (!lie || (shotNumber > 1 && !lie)) {
+        // ライは1打目=tee、2打目以降は必須
+        if (shotNumber !== 1) {
+          missing.push({
+            key: "lie",
+            question: "🤖 どこから打ちましたか？（フェアウェイ・ラフなど）",
+            required: true,
+          });
+        }
+      }
+      if (!nextLie || nextLie === "fw") {
+        // nextLie はデフォルトで "fw" が入っている、明示的に問う
+        missing.push({
+          key: "nextLie",
+          question:
+            "🤖 着地はどこ？（フェアウェイ/ラフ/グリーン/バンカー/池）",
+          required: true,
+        });
+      }
+      if (!direction) {
+        missing.push({
+          key: "direction",
+          question: "🤖 方向は？（左/真っ直ぐ/右・スキップ可）",
+          required: false,
+        });
+      }
+      if (!depth) {
+        missing.push({
+          key: "depth",
+          question: "🤖 距離感は？（ショート/ピン/オーバー・スキップ可）",
+          required: false,
+        });
+      }
+      if (!selfRating) {
+        missing.push({
+          key: "selfRating",
+          question: "🤖 自己評価は？（◎/○/△/×・スキップ可）",
+          required: false,
+        });
+      }
+      if (!contact) {
+        missing.push({
+          key: "contact",
+          question: "🤖 打感は？（ナイス/ダフリ/トップ/シャンク・スキップ可）",
+          required: false,
+        });
+      }
+    }
+    return missing;
+  };
+
+  // v3: チャットメッセージ追加
+  const addChatMessage = (role, text) => {
+    setChatMessages((prev) => [
+      ...prev,
+      { role, text, timestamp: Date.now() },
+    ]);
+  };
+
+  // v3: 対話モード開始
+  const startChatVoice = () => {
+    if (!speechSupported) {
+      setVoiceError("音声入力はこのブラウザで対応していません");
+      return;
+    }
+    setChatVoiceMode(true);
+    setChatMessages([
+      {
+        role: "ai",
+        text: "🤖 ショットを教えてください。「7番アイアン150ヤード、フェアウェイから」のように一気に話せます。",
+        timestamp: Date.now(),
+      },
+    ]);
+  };
+
+  // v3: 対話モード終了
+  const exitChatVoice = () => {
+    if (chatRecognitionRef.current) {
+      try {
+        chatRecognitionRef.current.abort();
+      } catch {}
+    }
+    setChatVoiceMode(false);
+    setChatMessages([]);
+    setChatVoiceState("idle");
+  };
+
+  // v3: 対話モードでの音声録音
+  const startChatRecognition = () => {
+    if (!speechSupported) return;
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.lang = "ja-JP";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+      setChatVoiceState("listening");
+    };
+    recognition.onerror = (e) => {
+      setChatVoiceState("idle");
+      addChatMessage("ai", "⚠️ 認識できませんでした。もう一度お願いします。");
+    };
+    recognition.onend = () => {
+      setChatVoiceState("idle");
+    };
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setChatVoiceState("processing");
+      try {
+        recognition.abort();
+      } catch {}
+
+      // ユーザーの返答をチャットに追加
+      addChatMessage("user", transcript);
+
+      // スキップキーワード検出
+      if (/^スキップ$|^とばす$|^飛ばす$|^skip$/i.test(transcript.trim())) {
+        // 直前の質問項目を「スキップ」扱い（特に何も入れない）
+        addChatMessage("ai", "🤖 スキップしました。次へ進みます。");
+        setTimeout(() => askNextOrConfirm(), 400);
+        return;
+      }
+
+      // 現在の値を集めて parseTranscript に渡す
+      const currentValues = {
+        clubId,
+        distance,
+        nextLie: nextLie === "fw" ? null : nextLie, // "fw" デフォルトは未入力扱い
+        direction,
+        depth,
+        selfRating,
+        outcome,
+        isWedge,
+        wedgeTargetDistance,
+        wedgeDistance,
+        wedgeResults,
+        contact,
+      };
+      const { updates } = parseTranscript(transcript, currentValues);
+
+      // フィールドを更新
+      if ("clubId" in updates) setClubId(updates.clubId);
+      if ("distance" in updates) setDistance(updates.distance);
+      if ("lie" in updates) setLie(updates.lie);
+      if ("nextLie" in updates) setNextLie(updates.nextLie);
+      if ("direction" in updates) setDirection(updates.direction);
+      if ("depth" in updates) setDepth(updates.depth);
+      if ("selfRating" in updates) setSelfRating(updates.selfRating);
+      if ("outcome" in updates) setOutcome(updates.outcome);
+      if ("wedgeTargetDistance" in updates)
+        setWedgeTargetDistance(updates.wedgeTargetDistance);
+      if ("wedgeDistance" in updates)
+        setWedgeDistance(updates.wedgeDistance);
+      if ("wedgeResults" in updates) setWedgeResults(updates.wedgeResults);
+      if ("contact" in updates) setContact(updates.contact);
+
+      // 解析結果を表示してから次の質問へ
+      const updatedKeys = Object.keys(updates);
+      if (updatedKeys.length > 0) {
+        const summary = updatedKeys
+          .map((k) => {
+            const v = updates[k];
+            if (k === "clubId") {
+              const c = clubs.find((cc) => cc.id === v);
+              return `クラブ:${c?.name || v}`;
+            }
+            if (k === "distance") return `距離:${v}${unit}`;
+            if (k === "lie") return `ライ:${LIE_LABELS[v] || v}`;
+            if (k === "nextLie") return `着地:${LIE_LABELS[v] || v}`;
+            if (k === "direction") return `方向:${DIR_LABELS[v] || v}`;
+            if (k === "depth") return `距離感:${DEPTH_LABELS[v] || v}`;
+            if (k === "selfRating")
+              return `評価:${SELF_RATING_LABELS[v] || v}`;
+            if (k === "outcome") return `結果:${OUTCOME_LABELS[v] || v}`;
+            if (k === "contact") return `打感:${CONTACT_LABELS[v] || v}`;
+            if (k === "wedgeTargetDistance") return `ピンまで:${v}${unit}`;
+            if (k === "wedgeDistance") return `実距離:${v}${unit}`;
+            if (k === "wedgeResults")
+              return `結果:${(Array.isArray(v) ? v : []).join("+")}`;
+            return `${k}:${v}`;
+          })
+          .join(" / ");
+        addChatMessage("ai", `🤖 認識: ${summary}`);
+      }
+
+      // 次の質問または完了確認
+      setTimeout(() => askNextOrConfirm(), 600);
+    };
+
+    chatRecognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch (e) {
+      setChatVoiceState("idle");
+    }
+  };
+
+  // v3: 次の質問または完了確認
+  const askNextOrConfirm = () => {
+    const missing = getMissingFields();
+    const requiredMissing = missing.filter((m) => m.required);
+    if (requiredMissing.length > 0) {
+      addChatMessage("ai", requiredMissing[0].question);
+    } else if (missing.length > 0) {
+      // 任意項目の質問（スキップ可）
+      addChatMessage("ai", missing[0].question);
+    } else {
+      // 全部揃った
+      addChatMessage(
+        "ai",
+        "🤖 全項目の入力が完了しました。下の「保存」ボタンで保存してください。"
+      );
+    }
+  };
+
+  // v3: 対話で次の質問をトリガー（録音停止後）
+  const stopChatRecognition = () => {
+    if (chatRecognitionRef.current) {
+      try {
+        chatRecognitionRef.current.stop();
+      } catch {}
+    }
+  };
+
   const startVoiceInput = () => {
     if (!speechSupported) {
       setVoiceError("音声入力はこのブラウザで対応していません");
@@ -4417,6 +4712,181 @@ function ShotEditor({
         wedgeTargetDistance != null)
     : clubId && outcome && lie;
 
+  // v3: 対話音声モード - チャット式UI
+  if (chatVoiceMode) {
+    const handleChatSave = () => {
+      // 既存の保存ロジックと同じデータを構築して送信
+      if (!clubId) return;
+      let saveData;
+      if (isWedge) {
+        saveData = {
+          clubId,
+          wedgeTargetDistance,
+          wedgeDistance,
+          wedgeResult: wedgeResults,
+          contact,
+          memo,
+          outcome: "in_play",
+          excludeFromAvg: excludeFromAvgShot,
+        };
+      } else {
+        saveData = {
+          clubId,
+          distance,
+          lie,
+          nextLie,
+          direction,
+          depth,
+          selfRating,
+          outcome,
+          contact,
+          excludeFromAvg: excludeFromAvgShot,
+          memo,
+        };
+      }
+      onSave(saveData);
+    };
+
+    const missing = getMissingFields();
+    const requiredMissing = missing.filter((m) => m.required);
+    const canSaveChat = requiredMissing.length === 0 && clubId;
+
+    return (
+      <div className="sheet-backdrop" onClick={exitChatVoice}>
+        <div
+          className="sheet shot-sheet chat-sheet"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="sheet-handle" />
+          <div className="shot-sheet-head">
+            <div className="shot-sheet-title">
+              <span className="shot-sheet-num">#{shotNumber}</span>
+              <span className="shot-sheet-label">💬 対話音声入力</span>
+            </div>
+            <button className="icon-btn" onClick={exitChatVoice}>
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="chat-stream">
+            {chatMessages.map((m, i) => (
+              <div
+                key={i}
+                className={`chat-bubble chat-${m.role}`}
+              >
+                <div className="chat-bubble-text">{m.text}</div>
+              </div>
+            ))}
+            {chatVoiceState === "listening" && (
+              <div className="chat-bubble chat-user listening">
+                <div className="chat-bubble-text">🎙 録音中…</div>
+              </div>
+            )}
+            {chatVoiceState === "processing" && (
+              <div className="chat-bubble chat-ai">
+                <div className="chat-bubble-text">考え中…</div>
+              </div>
+            )}
+          </div>
+
+          {/* 解析済みの状態を視覚的にも表示 */}
+          <div className="chat-status">
+            {clubId && (
+              <span className="chat-chip">
+                ✅ {clubs.find((c) => c.id === clubId)?.name || "—"}
+              </span>
+            )}
+            {!isWedge && distance != null && (
+              <span className="chat-chip">
+                ✅ {distance}{unit}
+              </span>
+            )}
+            {!isWedge && lie && (
+              <span className="chat-chip">
+                ✅ {LIE_LABELS[lie] || lie}
+              </span>
+            )}
+            {!isWedge && nextLie && nextLie !== "fw" && (
+              <span className="chat-chip">
+                ✅ →{LIE_LABELS[nextLie] || nextLie}
+              </span>
+            )}
+            {!isWedge && direction && (
+              <span className="chat-chip">
+                ✅ {DIR_LABELS[direction]}
+              </span>
+            )}
+            {!isWedge && depth && (
+              <span className="chat-chip">
+                ✅ {DEPTH_LABELS[depth]}
+              </span>
+            )}
+            {!isWedge && selfRating && (
+              <span className="chat-chip">
+                ✅ {SELF_RATING_LABELS[selfRating]}
+              </span>
+            )}
+            {isWedge && wedgeTargetDistance != null && (
+              <span className="chat-chip">
+                ✅ ピンまで{wedgeTargetDistance}
+              </span>
+            )}
+            {isWedge && wedgeDistance != null && (
+              <span className="chat-chip">
+                ✅ 実{wedgeDistance}
+              </span>
+            )}
+            {isWedge && wedgeResults.length > 0 && (
+              <span className="chat-chip">
+                ✅ {wedgeResults.join("+")}
+              </span>
+            )}
+            {contact && (
+              <span className="chat-chip">
+                ✅ {CONTACT_LABELS[contact]}
+              </span>
+            )}
+          </div>
+
+          <div className="chat-actions">
+            <button
+              className={`chat-record-btn ${chatVoiceState}`}
+              onClick={
+                chatVoiceState === "listening"
+                  ? stopChatRecognition
+                  : startChatRecognition
+              }
+              disabled={chatVoiceState === "processing"}
+            >
+              {chatVoiceState === "listening"
+                ? "■ 停止"
+                : chatVoiceState === "processing"
+                ? "認識中…"
+                : "🎤 話す"}
+            </button>
+            <button
+              className="chat-skip-btn"
+              onClick={() => {
+                addChatMessage("user", "（スキップ）");
+                setTimeout(() => askNextOrConfirm(), 300);
+              }}
+              disabled={chatVoiceState !== "idle"}
+            >
+              ⏭ スキップ
+            </button>
+            <button
+              className="chat-save-btn"
+              onClick={handleChatSave}
+              disabled={!canSaveChat || chatVoiceState !== "idle"}
+            >
+              ✓ 保存
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="sheet-backdrop" onClick={onCancel}>
       <div className="sheet shot-sheet" onClick={(e) => e.stopPropagation()}>
@@ -4431,34 +4901,46 @@ function ShotEditor({
           </button>
         </div>
 
-        {/* v2.1: 音声入力 */}
+        {/* v2.1/v3: 音声入力 - クイック + 対話 */}
         {speechSupported && (
           <div className="voice-input-section">
-            <button
-              className={`voice-input-btn ${voiceState}`}
-              onClick={
-                voiceState === "listening" ? stopVoiceInput : startVoiceInput
-              }
-              disabled={voiceState === "processing"}
-            >
-              <span className="voice-icon">
-                {voiceState === "listening" ? "■" : "🎤"}
-              </span>
-              <span className="voice-label">
-                {voiceState === "listening"
-                  ? "録音中… タップで停止"
-                  : voiceState === "processing"
-                  ? "認識中…"
-                  : voiceState === "error"
-                  ? voiceError
-                  : "音声で入力"}
-              </span>
-            </button>
+            <div className="voice-btn-group">
+              <button
+                className={`voice-input-btn quick ${voiceState}`}
+                onClick={
+                  voiceState === "listening" ? stopVoiceInput : startVoiceInput
+                }
+                disabled={voiceState === "processing"}
+              >
+                <span className="voice-icon">
+                  {voiceState === "listening" ? "■" : "🎤"}
+                </span>
+                <span className="voice-label">
+                  {voiceState === "listening"
+                    ? "録音中…"
+                    : voiceState === "processing"
+                    ? "認識中…"
+                    : voiceState === "error"
+                    ? voiceError
+                    : "クイック音声"}
+                </span>
+              </button>
+              <button
+                className="voice-input-btn chat"
+                onClick={startChatVoice}
+                disabled={voiceState !== "idle"}
+              >
+                <span className="voice-icon">💬</span>
+                <span className="voice-label">対話音声</span>
+              </button>
+            </div>
             {voiceTranscript && (
               <div className="voice-transcript">「{voiceTranscript}」</div>
             )}
             <div className="voice-hint">
-              例：「ドライバー 220ヤード フェアウェイ まあまあ」
+              <b>クイック</b>：一気に話す（例：「ドライバー 220ヤード フェアウェイ」）
+              <br />
+              <b>対話</b>：足りない項目をAIが順次質問（初心者向け）
             </div>
             <button
               className="voice-help-toggle"
@@ -8705,18 +9187,31 @@ function Style() {
         border-radius: 12px;
         border: 1px solid var(--border-soft);
       }
+      /* v3: 2ボタングループ */
+      .voice-btn-group {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .voice-input-btn.chat {
+        background: rgba(94, 184, 255, 0.12);
+        border-color: rgba(94, 184, 255, 0.3);
+      }
+      .voice-input-btn.chat:active {
+        background: rgba(94, 184, 255, 0.2);
+      }
       .voice-input-btn {
         width: 100%;
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 8px;
-        padding: 12px 16px;
+        gap: 6px;
+        padding: 11px 12px;
         background: var(--bg-1);
         border: 1px solid var(--border);
         border-radius: 10px;
         color: var(--text);
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.2s;
@@ -8788,6 +9283,122 @@ function Style() {
       }
       .voice-help-toggle:active {
         background: var(--bg-1);
+      }
+
+      /* v3: 対話音声 - チャット式UI */
+      .chat-sheet {
+        max-height: 88vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .chat-stream {
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-height: 240px;
+        max-height: calc(88vh - 280px);
+      }
+      .chat-bubble {
+        max-width: 80%;
+        padding: 10px 14px;
+        border-radius: 14px;
+        word-break: break-word;
+      }
+      .chat-bubble-text {
+        font-size: 13px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+      }
+      .chat-bubble.chat-ai {
+        align-self: flex-start;
+        background: var(--bg-2);
+        border-bottom-left-radius: 4px;
+        color: var(--text);
+      }
+      .chat-bubble.chat-user {
+        align-self: flex-end;
+        background: rgba(182, 242, 74, 0.18);
+        border-bottom-right-radius: 4px;
+        color: var(--text);
+      }
+      .chat-bubble.listening {
+        background: rgba(255, 107, 107, 0.18);
+        color: var(--red);
+        font-weight: 700;
+        animation: pulse-listen 1.2s ease-in-out infinite;
+      }
+      @keyframes pulse-listen {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+      .chat-status {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        padding: 8px 0;
+        border-top: 1px solid var(--border-soft);
+        border-bottom: 1px solid var(--border-soft);
+        margin: 8px 0;
+        min-height: 32px;
+      }
+      .chat-chip {
+        background: var(--bg-2);
+        color: var(--green);
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .chat-actions {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 8px;
+        padding-top: 8px;
+      }
+      .chat-record-btn {
+        padding: 14px;
+        background: var(--green);
+        color: #0a0a0a;
+        border: none;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .chat-record-btn.listening {
+        background: var(--red);
+        color: #fff;
+        animation: pulse-listen 1.2s ease-in-out infinite;
+      }
+      .chat-record-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .chat-skip-btn,
+      .chat-save-btn {
+        padding: 14px 12px;
+        background: var(--bg-2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .chat-save-btn:not(:disabled) {
+        background: rgba(182, 242, 74, 0.2);
+        border-color: var(--green);
+        color: var(--green);
+      }
+      .chat-save-btn:disabled,
+      .chat-skip-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
       }
       .voice-help-list {
         margin-top: 10px;
