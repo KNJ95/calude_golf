@@ -351,12 +351,18 @@ function isExcludedFromAvg(shot) {
 // - 自己評価が miss/bad
 // - off-play（OB等）
 // - excludeFromAvg フラグ（手動でミス指定）
-function isMissShot(shot) {
+// v2.4: ミス重み（自己評価のみで判定、off-play や平均除外は加算しない）
+// ◎ ○ 未入力 = 0, △ = 0.5, × = 1.0
+function getMissWeight(shot) {
   const r = getShotSelfRating(shot);
-  if (r === "miss" || r === "bad") return true;
-  if (isShotOffPlay(shot)) return true;
-  if (isExcludedFromAvg(shot)) return true;
-  return false;
+  if (r === "bad") return 1.0;
+  if (r === "miss") return 0.5;
+  return 0;
+}
+// 後方互換: boolean を返す関数（既存コードで使用）
+// 0.5 以上をミスとして扱う（△ も × もミスとしてカウント）
+function isMissShot(shot) {
+  return getMissWeight(shot) > 0;
 }
 // ホールのスコア（手入力 manualScore 優先、なければ shots.length）
 function getHoleScore(hole) {
@@ -1705,8 +1711,8 @@ function computeClubStats(state) {
   return state.clubs.map((c) => {
     const data = byClub[c.id];
     const all = data.all;
-    // ミス率計算: 全ショットが対象
-    const missCount = data.shots.filter((s) => isMissShot(s)).length;
+    // v2.4: ミス率計算（重み付け：◎○未入力=0、△=0.5、×=1.0）
+    const missScore = data.shots.reduce((sum, s) => sum + getMissWeight(s), 0);
     const dirShots = data.shots.filter((s) => s.direction);
     const dir = {
       left: dirShots.filter((s) => s.direction === "left").length,
@@ -1738,7 +1744,7 @@ function computeClubStats(state) {
         ? Math.round(data.rough.reduce((a, b) => a + b, 0) / data.rough.length)
         : null,
       missRate: data.shots.length
-        ? Math.round((missCount / data.shots.length) * 100)
+        ? Math.round((missScore / data.shots.length) * 100)
         : null,
       dir,
       depth,
@@ -1799,8 +1805,10 @@ function computeWedgeStats(state) {
       ? Math.round(diffs.reduce((sum, d) => sum + d, 0) / diffs.length)
       : null;
     // v2.1: ショット単位でカウント（複数結果が選択されていても1ショット=1回として扱う）
-    let successCount = 0;  // ピンorグリーン乗のショット数
-    let missShotsCount = 0;  // ショート/オーバー/左/右のいずれかが選ばれたショット数
+    // v2.4: ミス率は自己評価（◎○=0, △=0.5, ×=1.0）で計算
+    //   結果（短/長/左/右）はあくまで参考、自己評価でミスを判定する方針に統一
+    let successCount = 0; // ピンorグリーン乗のショット数
+    let missScore = 0; // 自己評価ベースの加重ミススコア
     shots.forEach((s) => {
       const results = Array.isArray(s.wedgeResult)
         ? s.wedgeResult
@@ -1811,16 +1819,8 @@ function computeWedgeStats(state) {
       if (results.includes("pin") || results.includes("green")) {
         successCount++;
       }
-      // ミス = short/over/left/right が1つでも含まれる、または excludeFromAvg
-      if (
-        results.includes("short") ||
-        results.includes("over") ||
-        results.includes("left") ||
-        results.includes("right") ||
-        isExcludedFromAvg(s)
-      ) {
-        missShotsCount++;
-      }
+      // ミススコア（自己評価ベース）
+      missScore += getMissWeight(s);
     });
     return {
       club: c,
@@ -1837,7 +1837,7 @@ function computeWedgeStats(state) {
         ? Math.round((successCount / shots.length) * 100)
         : null,
       missRate: shots.length
-        ? Math.round((missShotsCount / shots.length) * 100)
+        ? Math.round((missScore / shots.length) * 100)
         : null,
       // v2.1: 距離精度
       diffN: diffs.length, // サンプル数
@@ -4724,6 +4724,7 @@ function ShotEditor({
           wedgeTargetDistance,
           wedgeDistance,
           wedgeResult: wedgeResults,
+          selfRating, // v2.4: ウェッジにも自己評価
           contact,
           memo,
           outcome: "in_play",
@@ -5571,6 +5572,26 @@ function ShotEditor({
             </div>
 
             <div className="editor-section">
+              <div className="editor-label">自己評価（任意）</div>
+              <div className="result-row">
+                {SELF_RATINGS.map((r) => (
+                  <button
+                    key={r.id}
+                    className={`result-btn tone-${r.tone} ${
+                      selfRating === r.id ? "on" : ""
+                    }`}
+                    onClick={() =>
+                      setSelfRating(selfRating === r.id ? null : r.id)
+                    }
+                    title={r.desc}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="editor-section">
               <div className="editor-label">打感（任意）</div>
               <div className="contact-row">
                 {[
@@ -5655,6 +5676,7 @@ function ShotEditor({
                         wedgeTargetDistance,
                         wedgeDistance,
                         wedgeResult: wedgeResults, // v2.1: 配列として保存
+                        selfRating, // v2.4: ウェッジにも自己評価
                         contact,
                         memo,
                         // outcome は in_play 固定（ウェッジは結果をwedgeResultで管理）
@@ -6699,7 +6721,11 @@ function RoundDetailView({ roundId, state, setState, onBack }) {
       .map((c) => {
         const data = byClub[c.id];
         const dists = data.distances;
-        const missCount = data.shots.filter((s) => isMissShot(s)).length;
+        // v2.4: ミススコア（自己評価ベース）
+        const missScore = data.shots.reduce(
+          (sum, s) => sum + getMissWeight(s),
+          0
+        );
         return {
           club: c,
           n: data.shots.length,
@@ -6708,9 +6734,9 @@ function RoundDetailView({ roundId, state, setState, onBack }) {
             : null,
           min: dists.length ? Math.min(...dists) : null,
           max: dists.length ? Math.max(...dists) : null,
-          missCount,
+          missCount: missScore, // 数値（小数あり）
           missRate: data.shots.length
-            ? Math.round((missCount / data.shots.length) * 100)
+            ? Math.round((missScore / data.shots.length) * 100)
             : 0,
         };
       })
@@ -6848,7 +6874,9 @@ function RoundDetailView({ roundId, state, setState, onBack }) {
                   {s.min != null ? `${s.min}–${s.max}` : "—"}
                 </div>
                 <div className={`round-club-miss ${s.missRate > 40 ? "high" : ""}`}>
-                  {s.missCount > 0 ? `ミス${s.missCount}` : "—"}
+                  {s.missCount > 0
+                    ? `ミス${s.missCount.toFixed(s.missCount % 1 === 0 ? 0 : 1)}`
+                    : "—"}
                 </div>
               </div>
             ))}
