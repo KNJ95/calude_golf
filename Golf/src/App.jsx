@@ -351,9 +351,12 @@ function isExcludedFromAvg(shot) {
 // - 自己評価が miss/bad
 // - off-play（OB等）
 // - excludeFromAvg フラグ（手動でミス指定）
-// v2.4: ミス重み（自己評価のみで判定、off-play や平均除外は加算しない）
-// ◎ ○ 未入力 = 0, △ = 0.5, × = 1.0
+// v2.4/v2.5: ミス重み
+// - v2.5: isMiss フラグ true なら 1.0
+// - 自己評価ベース: ◎ ○ 未入力 = 0, △ = 0.5, × = 1.0
 function getMissWeight(shot) {
+  // v2.5: ミスフラグが立っているなら自動的に 1.0
+  if (shot.isMiss === true) return 1.0;
   const r = getShotSelfRating(shot);
   if (r === "bad") return 1.0;
   if (r === "miss") return 0.5;
@@ -1112,6 +1115,30 @@ const CONTACT_LABELS = {
   top: "トップ",
   shank: "シャンク",
 };
+
+// v2.5: ミスタイプ（ミスショット時に複数選択可）
+const MISS_TYPE_LABELS = {
+  duff: "ダフリ",
+  top: "トップ",
+  hook_pull: "引っかけ",
+  shank: "シャンク",
+  choro: "チョロ",
+  tempura: "テンプラ",
+  hook: "フック",
+  slice: "スライス",
+  chii_ping: "チーピン",
+};
+const MISS_TYPES = [
+  { id: "duff", label: "ダフリ" },
+  { id: "top", label: "トップ" },
+  { id: "hook_pull", label: "引っかけ" },
+  { id: "shank", label: "シャンク" },
+  { id: "choro", label: "チョロ" },
+  { id: "tempura", label: "テンプラ" },
+  { id: "hook", label: "フック" },
+  { id: "slice", label: "スライス" },
+  { id: "chii_ping", label: "チーピン" },
+];
 
 
 // ============================================================
@@ -3781,6 +3808,15 @@ function ShotRowInner({ index, shot, clubs, unit, onClick }) {
         )}
       </div>
       <div className="shot-tendency-tags">
+        {shot.isMiss && (
+          <span className="tag tag-miss">⚠️ミス</span>
+        )}
+        {Array.isArray(shot.missTypes) &&
+          shot.missTypes.slice(0, 2).map((mt, i) => (
+            <span key={i} className="tag tag-miss-type">
+              {MISS_TYPE_LABELS[mt] || mt}
+            </span>
+          ))}
         {dirLabel && <span className="tag tag-dir">{dirLabel}</span>}
         {depthLabel && <span className="tag tag-depth">{depthLabel}</span>}
         {shot.contact && shot.contact !== "nice" && (
@@ -3840,6 +3876,11 @@ function ShotEditor({
   // v2.1: 平均距離から除外フラグ（ミス率にはカウント）
   const [excludeFromAvgShot, setExcludeFromAvgShot] = useState(
     !!existing?.excludeFromAvg
+  );
+  // v2.5: ミスショットフラグ + ミスタイプ（複数選択）
+  const [isMiss, setIsMiss] = useState(!!existing?.isMiss);
+  const [missTypes, setMissTypes] = useState(
+    Array.isArray(existing?.missTypes) ? existing.missTypes : []
   );
   const [memo, setMemo] = useState(existing?.memo || "");
 
@@ -4729,6 +4770,8 @@ function ShotEditor({
           memo,
           outcome: "in_play",
           excludeFromAvg: excludeFromAvgShot,
+          isMiss, // v2.5
+          missTypes, // v2.5
         };
       } else {
         saveData = {
@@ -4742,6 +4785,8 @@ function ShotEditor({
           outcome,
           contact,
           excludeFromAvg: excludeFromAvgShot,
+          isMiss, // v2.5
+          missTypes, // v2.5
           memo,
         };
       }
@@ -5061,7 +5106,63 @@ function ShotEditor({
           </div>
         </div>
 
+        {/* v2.5: ミスショットチェックボックス（パター以外） */}
+        {!isPutter && (
+          <div className="editor-section miss-section">
+            <label className="miss-checkbox">
+              <input
+                type="checkbox"
+                checked={isMiss}
+                onChange={(e) => {
+                  setIsMiss(e.target.checked);
+                  if (!e.target.checked) {
+                    // チェック外したらミスタイプもクリア
+                    setMissTypes([]);
+                  }
+                }}
+              />
+              <span className="miss-checkbox-icon">⚠️</span>
+              <span className="miss-checkbox-label">
+                ミスショット
+                {isMiss && (
+                  <span className="miss-checkbox-sub">
+                    （飛距離・方向は任意）
+                  </span>
+                )}
+              </span>
+            </label>
+            {isMiss && (
+              <div className="miss-types">
+                <div className="miss-types-label">
+                  どんなミス？（複数選択可）
+                </div>
+                <div className="miss-types-grid">
+                  {MISS_TYPES.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className={`chip miss-type-chip ${
+                        missTypes.includes(m.id) ? "on" : ""
+                      }`}
+                      onClick={() => {
+                        if (missTypes.includes(m.id)) {
+                          setMissTypes(missTypes.filter((x) => x !== m.id));
+                        } else {
+                          setMissTypes([...missTypes, m.id]);
+                        }
+                      }}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {!isPutter && !isWedge && (
+          <div className={isMiss ? "miss-disabled-wrapper" : ""}>
           <>
         <div className={`editor-section ${highlightFields.distance ? "highlight" : ""}`}>
           <div className="editor-label">飛距離</div>
@@ -5245,6 +5346,7 @@ function ShotEditor({
           </label>
         </div>
           </>
+          </div>
         )}
 
         {/* v2.1: パター専用UI */}
@@ -5682,6 +5784,8 @@ function ShotEditor({
                         // outcome は in_play 固定（ウェッジは結果をwedgeResultで管理）
                         outcome: "in_play",
                         excludeFromAvg: excludeFromAvgShot,
+                        isMiss, // v2.5
+                        missTypes, // v2.5
                       }
                     : {
                         clubId,
@@ -5694,6 +5798,8 @@ function ShotEditor({
                         outcome,
                         contact,
                         excludeFromAvg: excludeFromAvgShot,
+                        isMiss, // v2.5
+                        missTypes, // v2.5
                         memo,
                       }
                 )
@@ -8977,6 +9083,17 @@ function Style() {
         color: var(--red);
         font-weight: 700;
       }
+      /* v2.5: ミスタグ */
+      .tag-miss {
+        background: rgba(255, 107, 107, 0.25);
+        color: var(--red);
+        font-weight: 700;
+      }
+      .tag-miss-type {
+        background: rgba(255, 184, 77, 0.18);
+        color: var(--amber);
+        font-weight: 600;
+      }
       .shot-lie {
         font-size: 10px; color: var(--text-dim);
         text-align: right;
@@ -9190,6 +9307,89 @@ function Style() {
         font-size: 13px; color: var(--text-dim);
       }
       .editor-section { margin-bottom: 14px; }
+
+      /* v2.5: ミスショット セクション */
+      .miss-section {
+        background: rgba(255, 107, 107, 0.05);
+        border: 1px solid rgba(255, 107, 107, 0.15);
+        border-radius: 12px;
+        padding: 12px;
+      }
+      .miss-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .miss-checkbox input[type="checkbox"] {
+        width: 22px;
+        height: 22px;
+        margin: 0;
+        accent-color: var(--red);
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+      .miss-checkbox-icon {
+        font-size: 18px;
+      }
+      .miss-checkbox-label {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--text);
+      }
+      .miss-checkbox-sub {
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--text-faint);
+        margin-left: 6px;
+      }
+      .miss-types {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px dashed rgba(255, 107, 107, 0.2);
+      }
+      .miss-types-label {
+        font-size: 11px;
+        color: var(--text-faint);
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .miss-types-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+      }
+      .miss-type-chip {
+        text-align: center;
+        padding: 10px 6px;
+        font-size: 12px;
+        background: var(--bg-2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        cursor: pointer;
+      }
+      .miss-type-chip.on {
+        background: rgba(255, 107, 107, 0.2);
+        border-color: var(--red);
+        color: var(--red);
+        font-weight: 700;
+      }
+      .miss-type-chip:active {
+        transform: scale(0.96);
+      }
+
+      /* v2.5: ミスモード時の入力フィールド非活性 */
+      .miss-disabled-wrapper > * {
+        opacity: 0.4;
+        transition: opacity 0.2s;
+      }
+      .miss-disabled-wrapper > *:focus-within,
+      .miss-disabled-wrapper > *:hover {
+        opacity: 1;
+      }
 
       /* v2.1: 音声入力でハイライト */
       .editor-section.highlight {
