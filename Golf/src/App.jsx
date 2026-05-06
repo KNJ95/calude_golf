@@ -110,6 +110,47 @@ const DEFAULT_CLUBS = [
   { id: "pt", name: "PT", category: "putter", avgDistance: null },
 ];
 
+// v2.1: クラブを番手順でソートするヘルパー
+// カテゴリ順: wood → utility → iron → wedge → putter
+// 各カテゴリ内: 番手の数字が小さい順（DR→3W→5W、3I→4I→...→9I、PW→AW→SW、ウェッジ度数は小→大）
+const CLUB_CATEGORY_ORDER = {
+  wood: 0,
+  utility: 1,
+  iron: 2,
+  wedge: 3,
+  putter: 4,
+};
+function clubSortKey(club) {
+  const catOrder = CLUB_CATEGORY_ORDER[club.category] ?? 99;
+  // 名前から数字を抽出（DR=0扱い、3W=3、7I=7、56度=56など）
+  const name = (club.name || "").toUpperCase();
+  let num = 0;
+  if (name === "DR") num = 0;
+  else if (name === "PT") num = 0;
+  else {
+    // 数字部分を抽出
+    const m = name.match(/(\d+(?:\.\d+)?)/);
+    if (m) num = parseFloat(m[1]);
+  }
+  // ウェッジ: PW→AW→SW を 50/52/56 として並べる（既存番手順と統合）
+  // 度数表記がない場合: PW=50, AW=52, SW=56 として補正
+  if (club.category === "wedge" && num === 0) {
+    if (name === "PW") num = 50;
+    else if (name === "AW") num = 52;
+    else if (name === "SW") num = 56;
+    else num = 99;
+  }
+  return [catOrder, num];
+}
+function sortClubs(clubs) {
+  return [...clubs].sort((a, b) => {
+    const [ca, na] = clubSortKey(a);
+    const [cb, nb] = clubSortKey(b);
+    if (ca !== cb) return ca - cb;
+    return na - nb;
+  });
+}
+
 const LIES = [
   { id: "tee", label: "ティー" },
   { id: "fw", label: "FW" },
@@ -232,12 +273,14 @@ const initialState = () => {
         const def = DEFAULT_CLUBS.find((d) => d.id === c.id);
         return { ...c, avgDistance: def?.avgDistance ?? null };
       });
+      // v2.1: クラブを番手順にソート
+      loaded.clubs = sortClubs(loaded.clubs);
     }
     if (!loaded.courseMasters) loaded.courseMasters = [];
     return migrateState(loaded);
   }
   return {
-    clubs: DEFAULT_CLUBS,
+    clubs: sortClubs(DEFAULT_CLUBS),
     rounds: [],
     courseMasters: [],
     unit: "yd",
@@ -256,6 +299,16 @@ const fmtDate = (iso) => {
     "0"
   )}.${String(d.getDate()).padStart(2, "0")}`;
 };
+
+// v2.1: ローカルタイムゾーンの「YYYY-MM-DD」を返す
+// new Date().toISOString() は UTC 基準なので、日本時間との差で前日になる問題を回避
+function getLocalDateString(d) {
+  const date = d || new Date();
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 function median(arr) {
   if (!arr.length) return null;
@@ -289,12 +342,8 @@ function isShotOffPlay(shot) {
   const o = getShotOutcome(shot);
   return o !== "in_play";
 }
-// 打ち直しフラグ（v2.0で追加、距離分析・ミス率分析から完全除外）
-function isReplay(shot) {
-  return !!shot.isReplay;
-}
-// v2.1: 平均距離からのみ除外（ミス率にはカウント）
-// 「フェアウェイには行ったが想定外の方向」「ギリギリOBではないが酷いショット」など
+// v2.1: 平均距離から除外（ミス率にはカウント）
+// 「フェアウェイには行ったが想定外の方向」「OB等のペナルティ」「打ち直し」「想定外のミス」など
 function isExcludedFromAvg(shot) {
   return !!shot.excludeFromAvg;
 }
@@ -302,12 +351,18 @@ function isExcludedFromAvg(shot) {
 // - 自己評価が miss/bad
 // - off-play（OB等）
 // - excludeFromAvg フラグ（手動でミス指定）
-function isMissShot(shot) {
+// v2.4: ミス重み（自己評価のみで判定、off-play や平均除外は加算しない）
+// ◎ ○ 未入力 = 0, △ = 0.5, × = 1.0
+function getMissWeight(shot) {
   const r = getShotSelfRating(shot);
-  if (r === "miss" || r === "bad") return true;
-  if (isShotOffPlay(shot)) return true;
-  if (isExcludedFromAvg(shot)) return true;
-  return false;
+  if (r === "bad") return 1.0;
+  if (r === "miss") return 0.5;
+  return 0;
+}
+// 後方互換: boolean を返す関数（既存コードで使用）
+// 0.5 以上をミスとして扱う（△ も × もミスとしてカウント）
+function isMissShot(shot) {
+  return getMissWeight(shot) > 0;
 }
 // ホールのスコア（手入力 manualScore 優先、なければ shots.length）
 function getHoleScore(hole) {
@@ -565,6 +620,7 @@ export default function App() {
         {view.name === "analytics" && (
           <AnalyticsView
             state={state}
+            setState={setState}
             onBack={() => setView({ name: "home" })}
           />
         )}
@@ -1049,6 +1105,13 @@ const OUTCOME_LABELS = {
 };
 const DIR_LABELS = { left: "左", straight: "直", right: "右" };
 const DEPTH_LABELS = { short: "ショート", pin: "ピン", over: "オーバー" };
+// v2.1: 打感（任意）
+const CONTACT_LABELS = {
+  nice: "ナイス",
+  duff: "ダフリ",
+  top: "トップ",
+  shank: "シャンク",
+};
 
 
 // ============================================================
@@ -1111,27 +1174,70 @@ function buildRoundReviewPrompt(round, clubs, unit) {
   lines.push("## 全ショット一覧");
   lines.push("");
   lines.push(
-    "| ホール | Par | # | クラブ | 距離 | 打点 | 着地 | 方向 | 距離感 | 自己評価 | 結果 | 打ち直し | メモ |"
+    "| ホール | Par | # | クラブ | 距離 | 打点 | 着地 | 方向 | 距離感 | 自己評価 | 打感 | 結果 | 平均除外 | メモ |"
   );
-  lines.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+  lines.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
   round.holes.forEach((h) => {
     h.shots.forEach((s, i) => {
       const club = clubMap[s.clubId]?.name || "—";
       const sr = getShotSelfRating(s);
       const oc = getShotOutcome(s);
+      const clubObj = clubMap[s.clubId];
+      const isPutterShot = clubObj?.category === "putter";
+      const isWedgeShot = clubObj?.category === "wedge";
+
+      // 距離: 通常クラブ→s.distance、パター→puttDistance(m), ウェッジ→「狙いNyd→実Nyd」
+      let distCol = "—";
+      if (isPutterShot && s.puttDistance != null) {
+        distCol = `${s.puttDistance}m`;
+      } else if (isWedgeShot) {
+        const t = s.wedgeTargetDistance;
+        const a = s.wedgeDistance;
+        if (t != null && a != null) {
+          const diff = a - t;
+          const sign = diff > 0 ? "+" : "";
+          distCol = `狙${t}→実${a}(${sign}${diff})`;
+        } else if (a != null) {
+          distCol = `${a}${unit}`;
+        } else if (t != null) {
+          distCol = `狙${t}${unit}`;
+        }
+      } else if (s.distance != null) {
+        distCol = `${s.distance}${unit}`;
+      }
+
+      // 結果: ウェッジ→配列ラベル、パター→puttResult、通常→outcome
+      let resultCol = OUTCOME_LABELS[oc] || "—";
+      if (isPutterShot && s.puttResult) {
+        const PUTT_LBL = {
+          in: "🎯IN", ok: "OK", short: "短", over: "長", left: "左", right: "右",
+        };
+        resultCol = PUTT_LBL[s.puttResult] || "—";
+      } else if (isWedgeShot) {
+        const arr = Array.isArray(s.wedgeResult)
+          ? s.wedgeResult
+          : s.wedgeResult ? [s.wedgeResult] : [];
+        const W_LBL = {
+          pin: "カップイン", green: "乗", short: "短", over: "長", left: "左外し", right: "右外し",
+        };
+        const labels = arr.map((r) => W_LBL[r]).filter(Boolean);
+        resultCol = labels.length > 0 ? labels.join("+") : "—";
+      }
+
       const row = [
         h.number,
         h.par,
         i + 1,
         club,
-        s.distance != null ? `${s.distance}${unit}` : "—",
+        distCol,
         LIE_LABELS[s.lie] || "—",
         LIE_LABELS[s.nextLie] || "—",
         DIR_LABELS[s.direction] || "—",
         DEPTH_LABELS[s.depth] || "—",
         sr ? SELF_RATING_LABELS[sr] : "—",
-        OUTCOME_LABELS[oc] || "—",
-        isReplay(s) ? "✓" : "—",
+        s.contact ? CONTACT_LABELS[s.contact] : "—",
+        resultCol,
+        isExcludedFromAvg(s) ? "✓" : "—",
         (s.memo || "").replace(/\|/g, "／").replace(/\n/g, " "),
       ]
         .map((v) => ` ${v} `)
@@ -1152,7 +1258,6 @@ function buildRoundReviewPrompt(round, clubs, unit) {
         (s) =>
           s.distance != null &&
           !isShotOffPlay(s) &&
-          !isReplay(s) &&
           !isExcludedFromAvg(s)
       )
       .map((s) => s.distance);
@@ -1183,6 +1288,119 @@ function buildRoundReviewPrompt(round, clubs, unit) {
     parts.push(`ミス率${Math.round((miss / shots.length) * 100)}%`);
     lines.push(`- **${c.name}**: ${parts.join(" / ")}`);
   });
+
+  // v2.1: ウェッジ集計（このラウンド）
+  const wedgeShotsByClub = {};
+  Object.entries(byClub).forEach(([cid, shots]) => {
+    const c = clubMap[cid];
+    if (c?.category === "wedge") {
+      wedgeShotsByClub[cid] = { club: c, shots };
+    }
+  });
+  const wedgeKeys = Object.keys(wedgeShotsByClub);
+  if (wedgeKeys.length > 0) {
+    lines.push("");
+    lines.push("## ウェッジ（コントロールショット、本ラウンド）");
+    lines.push("");
+    wedgeKeys.forEach((cid) => {
+      const { club, shots } = wedgeShotsByClub[cid];
+      // 結果を集計
+      const rc = { pin: 0, green: 0, short: 0, over: 0, left: 0, right: 0 };
+      shots.forEach((s) => {
+        const arr = Array.isArray(s.wedgeResult)
+          ? s.wedgeResult
+          : s.wedgeResult ? [s.wedgeResult] : [];
+        arr.forEach((r) => {
+          if (rc.hasOwnProperty(r)) rc[r]++;
+        });
+      });
+      // 距離精度
+      const diffs = shots
+        .filter(
+          (s) =>
+            s.wedgeTargetDistance != null &&
+            s.wedgeDistance != null &&
+            !isExcludedFromAvg(s)
+        )
+        .map((s) => s.wedgeDistance - s.wedgeTargetDistance);
+      const parts = [`${shots.length}回`];
+      if (diffs.length > 0) {
+        const absMean = Math.round(
+          diffs.reduce((sum, d) => sum + Math.abs(d), 0) / diffs.length
+        );
+        const signedMean = Math.round(
+          diffs.reduce((sum, d) => sum + d, 0) / diffs.length
+        );
+        parts.push(
+          `精度±${absMean}${unit} / クセ${
+            signedMean > 0 ? "+" : ""
+          }${signedMean}${unit}`
+        );
+      }
+      // 結果分布（0回のものはスキップ）
+      const resultStrs = [];
+      if (rc.pin) resultStrs.push(`カップイン${rc.pin}`);
+      if (rc.green) resultStrs.push(`乗${rc.green}`);
+      if (rc.short) resultStrs.push(`短${rc.short}`);
+      if (rc.over) resultStrs.push(`長${rc.over}`);
+      if (rc.left) resultStrs.push(`左${rc.left}`);
+      if (rc.right) resultStrs.push(`右${rc.right}`);
+      if (resultStrs.length > 0) parts.push(resultStrs.join("/"));
+      lines.push(`- **${club.name}**: ${parts.join(" / ")}`);
+    });
+  }
+
+  // v2.1: 打感集計（このラウンド、全クラブ横断）
+  const contactCounts = { nice: 0, duff: 0, top: 0, shank: 0 };
+  let contactN = 0;
+  Object.values(byClub).forEach((shots) => {
+    shots.forEach((s) => {
+      if (s.contact && contactCounts.hasOwnProperty(s.contact)) {
+        contactCounts[s.contact]++;
+        contactN++;
+      }
+    });
+  });
+  if (contactN > 0) {
+    lines.push("");
+    lines.push("## 打感（本ラウンド）");
+    lines.push("");
+    const cParts = [];
+    if (contactCounts.nice)
+      cParts.push(`ナイス${contactCounts.nice}`);
+    if (contactCounts.duff)
+      cParts.push(`ダフリ${contactCounts.duff}`);
+    if (contactCounts.top)
+      cParts.push(`トップ${contactCounts.top}`);
+    if (contactCounts.shank)
+      cParts.push(`シャンク${contactCounts.shank}`);
+    lines.push(`- 全${contactN}回: ${cParts.join(" / ")}`);
+    // ミスショット（duff/top/shank）が出たクラブを列挙
+    const missContactByClub = {};
+    Object.entries(byClub).forEach(([cid, shots]) => {
+      const c = clubMap[cid];
+      if (!c) return;
+      shots.forEach((s) => {
+        if (s.contact && s.contact !== "nice") {
+          if (!missContactByClub[c.name]) missContactByClub[c.name] = {};
+          const m = missContactByClub[c.name];
+          m[s.contact] = (m[s.contact] || 0) + 1;
+        }
+      });
+    });
+    if (Object.keys(missContactByClub).length > 0) {
+      lines.push("");
+      lines.push("ミス系打感のクラブ別内訳:");
+      Object.entries(missContactByClub).forEach(([name, counts]) => {
+        const ps = [];
+        if (counts.duff) ps.push(`ダフリ${counts.duff}`);
+        if (counts.top) ps.push(`トップ${counts.top}`);
+        if (counts.shank) ps.push(`シャンク${counts.shank}`);
+        lines.push(`- ${name}: ${ps.join("/")}`);
+      });
+    }
+  }
+
   return lines.join("\n");
 }
 
@@ -1263,6 +1481,107 @@ function buildIssueAnalysisPrompt(state) {
     });
     lines.push("");
   }
+
+  // v2.1: ウェッジパフォーマンス（コントロールショット、累積）
+  const wedgeStats = computeWedgeStats(state).filter((s) => s.n > 0);
+  if (wedgeStats.length > 0) {
+    lines.push("## ウェッジパフォーマンス（コントロールショット）");
+    lines.push("");
+    lines.push(
+      "| クラブ | 平均距離 | レンジ | カップイン率 | ミス率 | 距離精度(±) | クセ | 結果分布(IN/乗/短/長/左/右) | n |"
+    );
+    lines.push("|---|---|---|---|---|---|---|---|---|");
+    wedgeStats.forEach((s) => {
+      const rc = s.resultCounts;
+      const distribution = `${rc.pin}/${rc.green}/${rc.short}/${rc.over}/${rc.left}/${rc.right}`;
+      const accuracy =
+        s.diffN > 0 ? `±${s.absMeanDiff}${state.unit}(n=${s.diffN})` : "—";
+      const tendency =
+        s.signedMeanDiff != null
+          ? s.signedMeanDiff > 0
+            ? `+${s.signedMeanDiff}長め`
+            : s.signedMeanDiff < 0
+            ? `${s.signedMeanDiff}短め`
+            : "ぴったり"
+          : "—";
+      const cupinRate = s.n
+        ? Math.round((rc.pin / s.n) * 100) + "%"
+        : "—";
+      lines.push(
+        `| ${s.club.name} | ${s.trimmed ?? "—"}${state.unit} | ${
+          s.min != null ? `${s.min}-${s.max}` : "—"
+        } | ${cupinRate} | ${s.missRate ?? "—"}% | ${accuracy} | ${tendency} | ${distribution} | ${s.n} |`
+      );
+    });
+    lines.push("");
+  }
+
+  // v2.1: 打感（ダフリ・トップ・シャンク）の傾向
+  const contactByClub = {};
+  state.rounds.forEach((r) => {
+    r.holes.forEach((h) => {
+      h.shots.forEach((s) => {
+        if (!s.contact) return;
+        if (!contactByClub[s.clubId]) {
+          contactByClub[s.clubId] = {
+            nice: 0, duff: 0, top: 0, shank: 0, total: 0,
+          };
+        }
+        if (contactByClub[s.clubId].hasOwnProperty(s.contact)) {
+          contactByClub[s.clubId][s.contact]++;
+          contactByClub[s.clubId].total++;
+        }
+      });
+    });
+  });
+  const contactClubs = Object.entries(contactByClub)
+    .map(([cid, c]) => {
+      const club = state.clubs.find((x) => x.id === cid);
+      return club ? { club, ...c } : null;
+    })
+    .filter((x) => x !== null && x.total > 0);
+  if (contactClubs.length > 0) {
+    lines.push("## 打感の傾向（クラブ別）");
+    lines.push("");
+    lines.push("| クラブ | ナイス | ダフリ | トップ | シャンク | n |");
+    lines.push("|---|---|---|---|---|---|");
+    contactClubs.forEach((c) => {
+      lines.push(
+        `| ${c.club.name} | ${c.nice} | ${c.duff} | ${c.top} | ${c.shank} | ${c.total} |`
+      );
+    });
+    lines.push("");
+  }
+
+  // v2.1: メモから定性的な気づき（最新20件）
+  const memoEntries = [];
+  state.rounds.forEach((r) => {
+    r.holes.forEach((h) => {
+      h.shots.forEach((s) => {
+        if (s.memo && s.memo.trim() !== "") {
+          const club = state.clubs.find((c) => c.id === s.clubId);
+          memoEntries.push({
+            date: r.date,
+            club: club?.name || "—",
+            memo: s.memo.trim(),
+          });
+        }
+      });
+    });
+  });
+  // 新しい順（簡易）
+  memoEntries.reverse();
+  const recentMemos = memoEntries.slice(0, 20);
+  if (recentMemos.length > 0) {
+    lines.push("## 最近のショットメモ（最新20件、定性的気づき）");
+    lines.push("");
+    recentMemos.forEach((m) => {
+      const memoText = m.memo.replace(/\n/g, " ");
+      lines.push(`- ${m.date} ${m.club}: 「${memoText}」`);
+    });
+    lines.push("");
+  }
+
   return lines.join("\n");
 }
 
@@ -1328,6 +1647,39 @@ function buildClubDistancePrompt(state) {
       } |`
     );
   });
+
+  // v2.1: ウェッジ（コントロールショット）の距離感
+  const wedgeStats = computeWedgeStats(state).filter((s) => s.n > 0);
+  if (wedgeStats.length > 0) {
+    lines.push("");
+    lines.push(`## ウェッジ実戦距離（コントロールショット、単位: ${state.unit}）`);
+    lines.push("");
+    lines.push(
+      "| クラブ | 平均距離 | レンジ | カップイン率 | 距離精度(±) | クセ | n |"
+    );
+    lines.push("|---|---|---|---|---|---|---|");
+    wedgeStats.forEach((s) => {
+      const cupinRate = s.n
+        ? Math.round((s.resultCounts.pin / s.n) * 100) + "%"
+        : "—";
+      const accuracy =
+        s.diffN > 0 ? `±${s.absMeanDiff}(n=${s.diffN})` : "—";
+      const tendency =
+        s.signedMeanDiff != null
+          ? s.signedMeanDiff > 0
+            ? `+${s.signedMeanDiff}長め`
+            : s.signedMeanDiff < 0
+            ? `${s.signedMeanDiff}短め`
+            : "ぴったり"
+          : "—";
+      lines.push(
+        `| ${s.club.name} | ${s.trimmed ?? "—"} | ${
+          s.min != null ? `${s.min}-${s.max}` : "—"
+        } | ${cupinRate} | ${accuracy} | ${tendency} | ${s.n} |`
+      );
+    });
+  }
+
   return lines.join("\n");
 }
 
@@ -1342,11 +1694,10 @@ function computeClubStats(state) {
       h.shots.forEach((s) => {
         if (!byClub[s.clubId]) return;
         byClub[s.clubId].shots.push(s);
-        // 距離分析対象: distance あり、プレー外でない、打ち直しでない、平均除外フラグでない
+        // 距離分析対象: distance あり、プレー外でない、平均除外フラグでない
         if (
           s.distance != null &&
           !isShotOffPlay(s) &&
-          !isReplay(s) &&
           !isExcludedFromAvg(s)
         ) {
           byClub[s.clubId].all.push(s.distance);
@@ -1360,9 +1711,8 @@ function computeClubStats(state) {
   return state.clubs.map((c) => {
     const data = byClub[c.id];
     const all = data.all;
-    // ミス率計算: 打ち直しは完全除外、それ以外は対象
-    const missableShots = data.shots.filter((s) => !isReplay(s));
-    const missCount = missableShots.filter((s) => isMissShot(s)).length;
+    // v2.4: ミス率計算（重み付け：◎○未入力=0、△=0.5、×=1.0）
+    const missScore = data.shots.reduce((sum, s) => sum + getMissWeight(s), 0);
     const dirShots = data.shots.filter((s) => s.direction);
     const dir = {
       left: dirShots.filter((s) => s.direction === "left").length,
@@ -1393,13 +1743,264 @@ function computeClubStats(state) {
       roughAvg: data.rough.length
         ? Math.round(data.rough.reduce((a, b) => a + b, 0) / data.rough.length)
         : null,
-      missRate: missableShots.length
-        ? Math.round((missCount / missableShots.length) * 100)
+      missRate: data.shots.length
+        ? Math.round((missScore / data.shots.length) * 100)
         : null,
       dir,
       depth,
     };
   });
+}
+
+// v2.1: ウェッジ専用統計（コントロールショットの分析）
+function computeWedgeStats(state) {
+  const wedgeClubs = state.clubs.filter((c) => c.category === "wedge");
+  return wedgeClubs.map((c) => {
+    const shots = [];
+    state.rounds.forEach((r) => {
+      r.holes.forEach((h) => {
+        h.shots.forEach((s) => {
+          if (s.clubId === c.id) shots.push(s);
+        });
+      });
+    });
+    // 結果分布（v2.1: 配列または文字列の両方に対応）
+    const resultCounts = {
+      pin: 0, green: 0, short: 0, over: 0, left: 0, right: 0,
+    };
+    shots.forEach((s) => {
+      const results = Array.isArray(s.wedgeResult)
+        ? s.wedgeResult
+        : s.wedgeResult
+        ? [s.wedgeResult]
+        : [];
+      results.forEach((r) => {
+        if (resultCounts.hasOwnProperty(r)) {
+          resultCounts[r]++;
+        }
+      });
+    });
+    // 距離（excludeFromAvg なし、wedgeDistance あり）
+    const dists = shots
+      .filter((s) => s.wedgeDistance != null && !isExcludedFromAvg(s))
+      .map((s) => s.wedgeDistance);
+    // v2.1: ピンまで vs 実際の差分（精度）
+    // - excludeFromAvg は除外
+    // - ピンまでと実距離の両方が入っているショットだけ対象
+    const diffShots = shots.filter(
+      (s) =>
+        s.wedgeTargetDistance != null &&
+        s.wedgeDistance != null &&
+        !isExcludedFromAvg(s)
+    );
+    const diffs = diffShots.map(
+      (s) => s.wedgeDistance - s.wedgeTargetDistance
+    );
+    const absMean = diffs.length
+      ? Math.round(
+          diffs.reduce((sum, d) => sum + Math.abs(d), 0) / diffs.length
+        )
+      : null;
+    const signedMean = diffs.length
+      ? Math.round(diffs.reduce((sum, d) => sum + d, 0) / diffs.length)
+      : null;
+    // v2.1: ショット単位でカウント（複数結果が選択されていても1ショット=1回として扱う）
+    // v2.4: ミス率は自己評価（◎○=0, △=0.5, ×=1.0）で計算
+    //   結果（短/長/左/右）はあくまで参考、自己評価でミスを判定する方針に統一
+    let successCount = 0; // ピンorグリーン乗のショット数
+    let missScore = 0; // 自己評価ベースの加重ミススコア
+    shots.forEach((s) => {
+      const results = Array.isArray(s.wedgeResult)
+        ? s.wedgeResult
+        : s.wedgeResult
+        ? [s.wedgeResult]
+        : [];
+      // 寄せ成功 = pin or green が1つでも含まれる
+      if (results.includes("pin") || results.includes("green")) {
+        successCount++;
+      }
+      // ミススコア（自己評価ベース）
+      missScore += getMissWeight(s);
+    });
+    return {
+      club: c,
+      n: shots.length,
+      avg: dists.length
+        ? Math.round(dists.reduce((a, b) => a + b, 0) / dists.length)
+        : null,
+      median: dists.length ? Math.round(median(dists)) : null,
+      trimmed: dists.length ? Math.round(trimmedMean(dists)) : null,
+      max: dists.length ? Math.max(...dists) : null,
+      min: dists.length ? Math.min(...dists) : null,
+      resultCounts,
+      successRate: shots.length
+        ? Math.round((successCount / shots.length) * 100)
+        : null,
+      missRate: shots.length
+        ? Math.round((missScore / shots.length) * 100)
+        : null,
+      // v2.1: 距離精度
+      diffN: diffs.length, // サンプル数
+      absMeanDiff: absMean, // 絶対誤差平均（精度の指標）
+      signedMeanDiff: signedMean, // 符号付き平均誤差（クセの指標）
+    };
+  });
+}
+
+// v2.1: パター専用統計
+function computePutterStats(state) {
+  const putterIds = new Set(
+    state.clubs.filter((c) => c.category === "putter").map((c) => c.id)
+  );
+  // 全パターショットを集める
+  const shots = [];
+  state.rounds.forEach((r) => {
+    r.holes.forEach((h) => {
+      h.shots.forEach((s) => {
+        if (putterIds.has(s.clubId)) shots.push(s);
+      });
+    });
+  });
+
+  if (shots.length === 0) {
+    return null;
+  }
+
+  // 距離レンジ別の成功率（INまたはOK圏内）
+  const distanceBuckets = [
+    { id: "lt1", label: "〜1m", min: 0, max: 1 },
+    { id: "1-2", label: "1-2m", min: 1, max: 2 },
+    { id: "2-3", label: "2-3m", min: 2, max: 3 },
+    { id: "3-5", label: "3-5m", min: 3, max: 5 },
+    { id: "5+", label: "5m以上", min: 5, max: Infinity },
+  ];
+  const byDistance = distanceBuckets.map((b) => {
+    const inBucket = shots.filter(
+      (s) =>
+        s.puttDistance != null &&
+        s.puttDistance >= b.min &&
+        s.puttDistance < b.max
+    );
+    const inCount = inBucket.filter((s) => s.puttResult === "in").length;
+    const okOrIn = inBucket.filter(
+      (s) => s.puttResult === "in" || s.puttResult === "ok"
+    ).length;
+    return {
+      ...b,
+      n: inBucket.length,
+      inRate: inBucket.length
+        ? Math.round((inCount / inBucket.length) * 100)
+        : null,
+      okRate: inBucket.length
+        ? Math.round((okOrIn / inBucket.length) * 100)
+        : null,
+    };
+  });
+
+  // 傾斜別の成功率
+  const slopeOptions = [
+    { id: "up", label: "↗ 登り" },
+    { id: "flat", label: "→ 平ら" },
+    { id: "down", label: "↘ 下り" },
+  ];
+  const bySlope = slopeOptions.map((o) => {
+    const filtered = shots.filter((s) => s.puttLineSlope === o.id);
+    const inCount = filtered.filter((s) => s.puttResult === "in").length;
+    const okOrIn = filtered.filter(
+      (s) => s.puttResult === "in" || s.puttResult === "ok"
+    ).length;
+    return {
+      ...o,
+      n: filtered.length,
+      inRate: filtered.length
+        ? Math.round((inCount / filtered.length) * 100)
+        : null,
+      okRate: filtered.length
+        ? Math.round((okOrIn / filtered.length) * 100)
+        : null,
+    };
+  });
+
+  // 曲がり別の成功率
+  const curveOptions = [
+    { id: "hook", label: "↙ フック" },
+    { id: "straight", label: "↑ 直" },
+    { id: "slice", label: "↘ スライス" },
+  ];
+  const byCurve = curveOptions.map((o) => {
+    const filtered = shots.filter((s) => s.puttLineCurve === o.id);
+    const inCount = filtered.filter((s) => s.puttResult === "in").length;
+    const okOrIn = filtered.filter(
+      (s) => s.puttResult === "in" || s.puttResult === "ok"
+    ).length;
+    return {
+      ...o,
+      n: filtered.length,
+      inRate: filtered.length
+        ? Math.round((inCount / filtered.length) * 100)
+        : null,
+      okRate: filtered.length
+        ? Math.round((okOrIn / filtered.length) * 100)
+        : null,
+    };
+  });
+
+  // 結果分布（全体）
+  const resultCounts = {
+    in: 0, ok: 0, short: 0, over: 0, left: 0, right: 0,
+  };
+  shots.forEach((s) => {
+    if (s.puttResult && resultCounts.hasOwnProperty(s.puttResult)) {
+      resultCounts[s.puttResult]++;
+    }
+  });
+
+  // ラウンド毎のパット平均
+  const roundsWithPutts = state.rounds
+    .map((r) => {
+      const totalPutts = r.holes.reduce((sum, h) => {
+        return sum + getHolePutts(h, state.clubs);
+      }, 0);
+      const recordedHoles = r.holes.filter(
+        (h) => (h.shots || []).length > 0 || (h.manualPutts != null)
+      ).length;
+      return { round: r, totalPutts, recordedHoles };
+    })
+    .filter((x) => x.recordedHoles > 0);
+
+  const avgPuttsPerRound =
+    roundsWithPutts.length > 0
+      ? Math.round(
+          (roundsWithPutts.reduce((a, b) => a + b.totalPutts, 0) /
+            roundsWithPutts.length) *
+            10
+        ) / 10
+      : null;
+
+  // 18ホール換算のパット数平均
+  const avgPuttsPer18 =
+    roundsWithPutts.length > 0
+      ? Math.round(
+          (roundsWithPutts.reduce(
+            (a, b) =>
+              a + (b.recordedHoles > 0 ? (b.totalPutts / b.recordedHoles) * 18 : 0),
+            0
+          ) /
+            roundsWithPutts.length) *
+            10
+        ) / 10
+      : null;
+
+  return {
+    n: shots.length,
+    byDistance,
+    bySlope,
+    byCurve,
+    resultCounts,
+    avgPuttsPerRound,
+    avgPuttsPer18,
+    totalRounds: roundsWithPutts.length,
+  };
 }
 
 // ===== ラウンドKPI =====
@@ -1440,16 +2041,32 @@ function computeRoundKPI(round, clubs) {
     }
 
     if (hasShots) {
-      const targetIdx = h.par - 2 - 1;
+      // v2.1: パーオン判定改善
+      // 規定打数（Par-2打）でグリーンに乗っているか判定
+      // - 判定方法: 規定打数目のショットの nextLie が "green"
+      //   または、規定打数の次のショット（=パットor寄せ）が lie "green"
+      // - これによりユーザーが nextLie を省略しても、次のショットの lie で判定可能
+      const targetIdx = h.par - 2 - 1; // Par3=0, Par4=1, Par5=2
       if (targetIdx >= 0 && h.shots.length > targetIdx) {
         parOnEligible++;
         const shotAt = h.shots[targetIdx];
-        if (shotAt && shotAt.nextLie === "green") parOn++;
+        const nextShot = h.shots[targetIdx + 1];
+        const isOnGreen =
+          (shotAt && shotAt.nextLie === "green") ||
+          (nextShot && nextShot.lie === "green") ||
+          // パター（PT）が次のショットならグリーン乗り扱い
+          (nextShot && clubs.find((c) => c.id === nextShot.clubId)?.category === "putter");
+        if (isOnGreen) parOn++;
       }
       if (h.par >= 4 && h.shots.length >= 1) {
         fwEligible++;
         const tee = h.shots[0];
-        if (tee && tee.nextLie === "fw") fwKeep++;
+        // ティーショットの nextLie が fw、または次のショットの lie が fw
+        const nextAfterTee = h.shots[1];
+        const isOnFw =
+          (tee && tee.nextLie === "fw") ||
+          (nextAfterTee && nextAfterTee.lie === "fw");
+        if (isOnFw) fwKeep++;
       }
     }
   });
@@ -1684,6 +2301,42 @@ function HomeView({
   // スワイプで開いているカードのID（同時に複数開かない）
   const [swipedId, setSwipedId] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  // v2.2: ラウンドカードをタップ時、編集シートを表示し、閉じる時にラウンド画面へ
+  const [editingRound, setEditingRound] = useState(null);
+
+  // 編集シートで保存された時：メタ情報を更新してラウンド画面へ遷移
+  const handleEditSave = (updates) => {
+    if (!editingRound) return;
+    setState((s) => ({
+      ...s,
+      rounds: s.rounds.map((r) =>
+        r.id === editingRound.id
+          ? {
+              ...r,
+              date: updates.date,
+              venue: updates.venue,
+              frontCourse: updates.frontCourse,
+              backCourse: updates.backCourse,
+              course: updates.course,
+              tee: updates.tee,
+              weather: updates.weather,
+              // holes（ショット・スコア）はそのまま維持
+            }
+          : r
+      ),
+    }));
+    const targetId = editingRound.id;
+    setEditingRound(null);
+    onOpenRound(targetId);
+  };
+
+  // 編集シートをキャンセル時：編集なしでラウンド画面へ遷移
+  const handleEditCancel = () => {
+    if (!editingRound) return;
+    const targetId = editingRound.id;
+    setEditingRound(null);
+    onOpenRound(targetId);
+  };
 
   const deleteRound = (id) => {
     setState((s) => ({
@@ -1760,7 +2413,7 @@ function HomeView({
                   isSwipedOpen={swipedId === r.id}
                   onSwipeOpen={() => setSwipedId(r.id)}
                   onSwipeClose={() => setSwipedId(null)}
-                  onTap={() => onOpenRound(r.id)}
+                  onTap={() => setEditingRound(r)}
                   onDeleteClick={() => setConfirmDeleteId(r.id)}
                 />
               );
@@ -1774,6 +2427,15 @@ function HomeView({
           courseMasters={state.courseMasters || []}
           onCancel={() => setShowNew(false)}
           onStart={startRound}
+        />
+      )}
+
+      {editingRound && (
+        <NewRoundSheet
+          courseMasters={state.courseMasters || []}
+          existing={editingRound}
+          onCancel={handleEditCancel}
+          onStart={handleEditSave}
         />
       )}
 
@@ -1987,14 +2649,15 @@ function SwipeableRoundCard({
   );
 }
 
-function NewRoundSheet({ courseMasters, onCancel, onStart }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const [date, setDate] = useState(today);
-  const [venue, setVenue] = useState("");
-  const [tee, setTee] = useState("");
-  const [frontCourse, setFrontCourse] = useState("");
-  const [backCourse, setBackCourse] = useState("");
-  const [weather, setWeather] = useState("");
+function NewRoundSheet({ courseMasters, onCancel, onStart, existing }) {
+  const isEdit = !!existing;
+  const today = getLocalDateString();
+  const [date, setDate] = useState(existing?.date || today);
+  const [venue, setVenue] = useState(existing?.venue || "");
+  const [tee, setTee] = useState(existing?.tee || "");
+  const [frontCourse, setFrontCourse] = useState(existing?.frontCourse || "");
+  const [backCourse, setBackCourse] = useState(existing?.backCourse || "");
+  const [weather, setWeather] = useState(existing?.weather || "");
   const [showVenueList, setShowVenueList] = useState(false);
   const [showFrontList, setShowFrontList] = useState(false);
   const [showBackList, setShowBackList] = useState(false);
@@ -2049,6 +2712,28 @@ function NewRoundSheet({ courseMasters, onCancel, onStart }) {
   const handleStart = () => {
     if (!venue.trim()) return;
 
+    const courseLabel =
+      frontCourse.trim() && backCourse.trim()
+        ? venue + " [" + frontCourse + " → " + backCourse + "]"
+        : frontCourse.trim()
+        ? venue + " [" + frontCourse + "]"
+        : venue;
+
+    // 編集モード: メタ情報のみ送信（combinedHoles は更新しない）
+    if (isEdit) {
+      onStart({
+        date,
+        venue: venue.trim(),
+        frontCourse: frontCourse.trim(),
+        backCourse: backCourse.trim(),
+        course: courseLabel,
+        tee: tee || null,
+        weather,
+      });
+      return;
+    }
+
+    // 新規モード: combinedHoles を作って送信
     const frontHoles = frontMaster?.holes || [];
     const backHoles = backMaster?.holes || [];
 
@@ -2065,13 +2750,6 @@ function NewRoundSheet({ courseMasters, onCancel, onStart }) {
           : { par: 4, distance: null };
       }
     });
-
-    const courseLabel =
-      frontCourse.trim() && backCourse.trim()
-        ? venue + " [" + frontCourse + " → " + backCourse + "]"
-        : frontCourse.trim()
-        ? venue + " [" + frontCourse + "]"
-        : venue;
 
     onStart({
       date,
@@ -2091,7 +2769,9 @@ function NewRoundSheet({ courseMasters, onCancel, onStart }) {
     <div className="sheet-backdrop" onClick={onCancel}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-handle" />
-        <div className="sheet-title">新しいラウンド</div>
+        <div className="sheet-title">
+          {isEdit ? "ラウンド編集" : "新しいラウンド"}
+        </div>
 
         <label className="field">
           <span className="field-label">
@@ -2333,7 +3013,7 @@ function NewRoundSheet({ courseMasters, onCancel, onStart }) {
             onClick={handleStart}
             disabled={!canStart}
           >
-            開始
+            {isEdit ? "保存" : "開始"}
           </button>
         </div>
       </div>
@@ -2995,6 +3675,71 @@ function ShotRowInner({ index, shot, clubs, unit, onClick }) {
     );
   }
 
+  // v2.1: ウェッジの場合は専用表示
+  const isWedgeShot = club?.category === "wedge";
+  if (isWedgeShot) {
+    const WEDGE_RESULT_LABELS = {
+      pin: { label: "🎯 カップイン", tone: "good" },
+      green: { label: "○ 乗", tone: "ok" },
+      short: { label: "ショート", tone: "miss" },
+      over: { label: "オーバー", tone: "miss" },
+      left: { label: "← 左外し", tone: "miss" },
+      right: { label: "右外し →", tone: "miss" },
+    };
+    // v2.1: 配列または文字列（旧データ）の両方に対応
+    const wRawResults = Array.isArray(shot.wedgeResult)
+      ? shot.wedgeResult
+      : shot.wedgeResult
+      ? [shot.wedgeResult]
+      : [];
+    const wResults = wRawResults
+      .map((r) => WEDGE_RESULT_LABELS[r])
+      .filter(Boolean);
+    return (
+      <button className="shot-row" onClick={onClick}>
+        <div className="shot-num">
+          {index}
+          {isExcludedFromAvg(shot) && (
+            <span className="shot-replay-badge" title="平均距離から除外">⊘</span>
+          )}
+        </div>
+        <div className="shot-club">{club?.name || "—"}</div>
+        <div className="shot-distance">
+          {shot.wedgeDistance != null ? (
+            <>
+              <span className="dist-num">{shot.wedgeDistance}</span>
+              <span className="dist-unit">{unit}</span>
+            </>
+          ) : (
+            <span className="dist-empty">—</span>
+          )}
+        </div>
+        <div className="shot-tendency-tags">
+          {shot.contact && shot.contact !== "nice" && (
+            <span className="tag tag-contact">
+              {CONTACT_LABELS[shot.contact]}
+            </span>
+          )}
+        </div>
+        <div className="shot-lie">—</div>
+        <div className="shot-result-cell">
+          {wResults.length > 0 && (
+            <div className="shot-result-multi">
+              {wResults.map((wr, i) => (
+                <span
+                  key={i}
+                  className={`shot-result-mini tone-${wr.tone}`}
+                >
+                  {wr.label}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </button>
+    );
+  }
+
   const sr = getShotSelfRating(shot);
   const oc = getShotOutcome(shot);
   const rating = SELF_RATINGS.find((r) => r.id === sr);
@@ -3020,7 +3765,9 @@ function ShotRowInner({ index, shot, clubs, unit, onClick }) {
     <button className="shot-row" onClick={onClick}>
       <div className="shot-num">
         {index}
-        {isReplay(shot) && <span className="shot-replay-badge">↻</span>}
+        {isExcludedFromAvg(shot) && (
+          <span className="shot-replay-badge" title="平均距離から除外">⊘</span>
+        )}
       </div>
       <div className="shot-club">{club?.name || "—"}</div>
       <div className="shot-distance">
@@ -3036,6 +3783,11 @@ function ShotRowInner({ index, shot, clubs, unit, onClick }) {
       <div className="shot-tendency-tags">
         {dirLabel && <span className="tag tag-dir">{dirLabel}</span>}
         {depthLabel && <span className="tag tag-depth">{depthLabel}</span>}
+        {shot.contact && shot.contact !== "nice" && (
+          <span className="tag tag-contact">
+            {CONTACT_LABELS[shot.contact]}
+          </span>
+        )}
       </div>
       <div className="shot-lie">{lie?.label}</div>
       <div className="shot-result-cell">
@@ -3083,8 +3835,9 @@ function ShotEditor({
   const [outcome, setOutcome] = useState(
     existing ? getShotOutcome(existing) : "in_play"
   );
-  const [isReplayShot, setIsReplayShot] = useState(!!existing?.isReplay);
-  // v2.1: 平均距離からのみ除外（ミス率にはカウント）
+  // v2.1: 打感（任意：nice/duff/top/shank/null）通常クラブ・ウェッジで使用
+  const [contact, setContact] = useState(existing?.contact || null);
+  // v2.1: 平均距離から除外フラグ（ミス率にはカウント）
   const [excludeFromAvgShot, setExcludeFromAvgShot] = useState(
     !!existing?.excludeFromAvg
   );
@@ -3106,11 +3859,34 @@ function ShotEditor({
   // v2.1: 複数打を一括記録するための打数（編集モードでは1固定、新規追加モードのみ可変）
   const [puttCount, setPuttCount] = useState(1);
 
+  // v2.1: ウェッジ専用 state
+  const [wedgeTargetDistance, setWedgeTargetDistance] = useState(
+    existing?.wedgeTargetDistance ?? null
+  ); // 狙った距離
+  const [wedgeDistance, setWedgeDistance] = useState(
+    existing?.wedgeDistance ?? null
+  ); // 実際に打った距離
+  // v2.1: ウェッジ結果は配列（複数選択：状態 + 距離 + 方向）
+  // 既存データ（string）との互換のため配列に正規化
+  const [wedgeResults, setWedgeResults] = useState(() => {
+    const r = existing?.wedgeResult;
+    if (Array.isArray(r)) return r;
+    if (typeof r === "string" && r) return [r];
+    return [];
+  }); // (string)[] : ['pin'|'green', 'short'|'over', 'left'|'right'] の最大3要素
+
   // パター専用UIを表示するかどうか
   const isPutter = useMemo(() => {
     if (!clubId) return false;
     const club = clubs.find((c) => c.id === clubId);
     return club?.category === "putter";
+  }, [clubId, clubs]);
+
+  // v2.1: ウェッジ専用UIを表示するかどうか
+  const isWedge = useMemo(() => {
+    if (!clubId) return false;
+    const club = clubs.find((c) => c.id === clubId);
+    return club?.category === "wedge";
   }, [clubId, clubs]);
 
   // 音声入力 state
@@ -3120,6 +3896,12 @@ function ShotEditor({
   const [highlightFields, setHighlightFields] = useState({}); // {clubId:true, distance:true, ...}
   const [showVoiceHelp, setShowVoiceHelp] = useState(false); // 認識可能ワード一覧の展開
   const recognitionRef = useRef(null);
+
+  // v3: 対話音声入力 state
+  const [chatVoiceMode, setChatVoiceMode] = useState(false); // 対話モードのオン/オフ
+  const [chatMessages, setChatMessages] = useState([]); // {role: 'ai'|'user', text: string, timestamp: number}[]
+  const [chatVoiceState, setChatVoiceState] = useState("idle"); // idle|listening|processing
+  const chatRecognitionRef = useRef(null);
 
   // 音声認識API対応チェック
   const speechSupported = useMemo(() => {
@@ -3234,7 +4016,8 @@ function ShotEditor({
     }
 
     // 距離（数字 + ヤード/メートルなど）
-    if (!currentValues.distance) {
+    // v2.1: ウェッジ時は専用フィールド（wedgeTargetDistance/wedgeDistance）を使うので、ここはスキップ
+    if (!currentValues.distance && !currentValues.isWedge) {
       // 度数表記（56度、58°など）を距離抽出から除外
       const distSearchText = normalized
         .replace(/\d+\s*度/g, "")
@@ -3280,7 +4063,8 @@ function ShotEditor({
     }
 
     // 方向
-    if (!currentValues.direction) {
+    // v2.1: ウェッジ時は wedgeResult で左外し/右外しを管理するのでスキップ
+    if (!currentValues.direction && !currentValues.isWedge) {
       if (/フック|左/.test(normalized)) {
         updates.direction = "left";
         matched.direction = true;
@@ -3294,7 +4078,8 @@ function ShotEditor({
     }
 
     // 距離感
-    if (!currentValues.depth) {
+    // v2.1: ウェッジ時は wedgeResult で短/長を管理するのでスキップ
+    if (!currentValues.depth && !currentValues.isWedge) {
       if (/ショート|手前|短/.test(normalized)) {
         updates.depth = "short";
         matched.depth = true;
@@ -3341,15 +4126,398 @@ function ShotEditor({
       }
     }
 
-    // 打ち直し
-    if (!currentValues.isReplay) {
-      if (/打ち直し|打ちなおし|打直し/.test(normalized)) {
-        updates.isReplay = true;
-        matched.isReplay = true;
+    // v2.1: ウェッジ専用フィールドの音声認識
+    if (currentValues.isWedge) {
+      // 1. ピンまで距離 + 実距離の抽出
+      // 「ピンまで」「ピンまでの距離」キーワードで分岐
+      // 度数表記（56度、58°など）を除外
+      const wedgeSearchText = normalized
+        .replace(/\d+\s*度/g, "")
+        .replace(/\d+\s*ど(?![くう])/g, "")
+        .replace(/\d+\s*°/g, "");
+
+      // パターン1: 「ピンまで N」を抽出
+      const targetMatch = wedgeSearchText.match(
+        /ピン\s*まで(?:\s*の?\s*距離)?\s*(\d{2,3})/
+      );
+      let targetMatchEnd = -1;
+      if (targetMatch && !currentValues.wedgeTargetDistance) {
+        const n = parseInt(targetMatch[1], 10);
+        if (n >= 5 && n <= 200) {
+          updates.wedgeTargetDistance = n;
+          matched.wedgeTargetDistance = true;
+          targetMatchEnd = targetMatch.index + targetMatch[0].length;
+        }
+      }
+
+      // パターン2: 残りの数字を「実距離」として抽出
+      // 「ピンまで N」のマッチ位置以降のテキストから数字を探す
+      if (!currentValues.wedgeDistance) {
+        const remainingText =
+          targetMatchEnd >= 0
+            ? wedgeSearchText.substring(targetMatchEnd)
+            : wedgeSearchText;
+        const allNums = [...remainingText.matchAll(/(\d{2,3})/g)]
+          .map((m) => parseInt(m[1], 10))
+          .filter((n) => n >= 5 && n <= 200);
+        if (allNums.length > 0) {
+          // 残りのテキストの最初の数字を実距離として採用
+          updates.wedgeDistance = allNums[0];
+          matched.wedgeDistance = true;
+        }
+      }
+
+      // 3. 結果（wedgeResults）の認識
+      // 「ピンまで」というキーワードを除去してから判定（pin との誤マッチを防ぐ）
+      const resultText = normalized.replace(/ピン\s*まで(?:\s*の?\s*距離)?\s*\d+/g, "");
+      const existingResults = Array.isArray(currentValues.wedgeResults)
+        ? currentValues.wedgeResults
+        : [];
+      if (existingResults.length === 0) {
+        // グループごとに排他的に判定（同グループは1つだけ選ばれる）
+        const newResults = [];
+
+        // 状態グループ: pin / green
+        if (/カップイン|カップ\s*イン|ホールイン|入った|沈めた/.test(resultText) ||
+            /ピン$|ピンに|ピン寄|ピン側|ピン近|ピンから/.test(resultText) ||
+            /\sピン(?:\s|$)/.test(" " + resultText + " ")) {
+          newResults.push("pin");
+        } else if (/グリーン乗|グリーンに乗|乗った|乗せた|オン$|オンした/.test(resultText)) {
+          newResults.push("green");
+        }
+
+        // 距離グループ: short / over
+        if (/ショート|短かった|届かな/.test(resultText)) {
+          newResults.push("short");
+        } else if (/オーバー|長かった|大きすぎ/.test(resultText)) {
+          newResults.push("over");
+        }
+
+        // 方向グループ: left / right
+        if (/左外し|左に外|左に逃げ|左にひっか/.test(resultText) ||
+            /\s左(?:外し|に|だ|だった)/.test(" " + resultText)) {
+          newResults.push("left");
+        } else if (/右外し|右に外|右に逃げ|右にすっ/.test(resultText) ||
+                   /\s右(?:外し|に|だ|だった)/.test(" " + resultText)) {
+          newResults.push("right");
+        }
+
+        if (newResults.length > 0) {
+          updates.wedgeResults = newResults;
+          matched.wedgeResults = true;
+        }
+      }
+    }
+
+    // v2.1: 打感（contact）の認識（通常クラブ・ウェッジ共通）
+    if (!currentValues.contact) {
+      if (/ナイス\s*ショット|ナイスショ|ナイスon|ナイスです|^ナイス$|ナイスでした|ナイス$/.test(normalized) ||
+          /\sナイス(?:\s|$)/.test(" " + normalized + " ")) {
+        updates.contact = "nice";
+        matched.contact = true;
+      } else if (/ダフリ|ダフ|ダフった|ダフって/.test(normalized)) {
+        updates.contact = "duff";
+        matched.contact = true;
+      } else if (/トップ\s*した|トップ$|トップって|^トップ$|トップに/.test(normalized) ||
+                 /\sトップ(?:\s|$)/.test(" " + normalized + " ")) {
+        updates.contact = "top";
+        matched.contact = true;
+      } else if (/シャンク/.test(normalized)) {
+        updates.contact = "shank";
+        matched.contact = true;
       }
     }
 
     return { updates, matched };
+  };
+
+  // v3: 対話音声 - 必要項目の判定
+  // 通常クラブ・ウェッジ別に不足項目を返す
+  const getMissingFields = () => {
+    const missing = [];
+    if (!clubId) {
+      missing.push({
+        key: "clubId",
+        question: "🤖 どのクラブで打ちましたか？",
+        required: true,
+      });
+    }
+    // クラブ確定後でないと、後続の必須/任意の判定ができないので一度ここで止める
+    if (!clubId) return missing;
+
+    const club = clubs.find((c) => c.id === clubId);
+    const isW = club?.category === "wedge";
+    const isP = club?.category === "putter";
+
+    if (isP) {
+      // パターは現状の対話モードでは扱わない（既存UIに誘導）
+      return [];
+    }
+
+    if (isW) {
+      // ウェッジ
+      if (wedgeTargetDistance == null) {
+        missing.push({
+          key: "wedgeTargetDistance",
+          question: "🤖 ピンまでの距離は？",
+          required: true,
+        });
+      }
+      if (wedgeDistance == null) {
+        missing.push({
+          key: "wedgeDistance",
+          question: "🤖 実際に飛んだ距離は？",
+          required: true,
+        });
+      }
+      if (wedgeResults.length === 0) {
+        missing.push({
+          key: "wedgeResults",
+          question:
+            "🤖 結果は？（カップイン/グリーン乗/ショート/オーバー/左外し/右外し）",
+          required: false,
+        });
+      }
+      if (!contact) {
+        missing.push({
+          key: "contact",
+          question: "🤖 打感は？（ナイス/ダフリ/トップ/シャンク・スキップ可）",
+          required: false,
+        });
+      }
+    } else {
+      // 通常クラブ
+      if (distance == null) {
+        missing.push({
+          key: "distance",
+          question: "🤖 距離は何ヤードでしたか？",
+          required: true,
+        });
+      }
+      if (!lie || (shotNumber > 1 && !lie)) {
+        // ライは1打目=tee、2打目以降は必須
+        if (shotNumber !== 1) {
+          missing.push({
+            key: "lie",
+            question: "🤖 どこから打ちましたか？（フェアウェイ・ラフなど）",
+            required: true,
+          });
+        }
+      }
+      if (!nextLie || nextLie === "fw") {
+        // nextLie はデフォルトで "fw" が入っている、明示的に問う
+        missing.push({
+          key: "nextLie",
+          question:
+            "🤖 着地はどこ？（フェアウェイ/ラフ/グリーン/バンカー/池）",
+          required: true,
+        });
+      }
+      if (!direction) {
+        missing.push({
+          key: "direction",
+          question: "🤖 方向は？（左/真っ直ぐ/右・スキップ可）",
+          required: false,
+        });
+      }
+      if (!depth) {
+        missing.push({
+          key: "depth",
+          question: "🤖 距離感は？（ショート/ピン/オーバー・スキップ可）",
+          required: false,
+        });
+      }
+      if (!selfRating) {
+        missing.push({
+          key: "selfRating",
+          question: "🤖 自己評価は？（◎/○/△/×・スキップ可）",
+          required: false,
+        });
+      }
+      if (!contact) {
+        missing.push({
+          key: "contact",
+          question: "🤖 打感は？（ナイス/ダフリ/トップ/シャンク・スキップ可）",
+          required: false,
+        });
+      }
+    }
+    return missing;
+  };
+
+  // v3: チャットメッセージ追加
+  const addChatMessage = (role, text) => {
+    setChatMessages((prev) => [
+      ...prev,
+      { role, text, timestamp: Date.now() },
+    ]);
+  };
+
+  // v3: 対話モード開始
+  const startChatVoice = () => {
+    if (!speechSupported) {
+      setVoiceError("音声入力はこのブラウザで対応していません");
+      return;
+    }
+    setChatVoiceMode(true);
+    setChatMessages([
+      {
+        role: "ai",
+        text: "🤖 ショットを教えてください。「7番アイアン150ヤード、フェアウェイから」のように一気に話せます。",
+        timestamp: Date.now(),
+      },
+    ]);
+  };
+
+  // v3: 対話モード終了
+  const exitChatVoice = () => {
+    if (chatRecognitionRef.current) {
+      try {
+        chatRecognitionRef.current.abort();
+      } catch {}
+    }
+    setChatVoiceMode(false);
+    setChatMessages([]);
+    setChatVoiceState("idle");
+  };
+
+  // v3: 対話モードでの音声録音
+  const startChatRecognition = () => {
+    if (!speechSupported) return;
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.lang = "ja-JP";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+      setChatVoiceState("listening");
+    };
+    recognition.onerror = (e) => {
+      setChatVoiceState("idle");
+      addChatMessage("ai", "⚠️ 認識できませんでした。もう一度お願いします。");
+    };
+    recognition.onend = () => {
+      setChatVoiceState("idle");
+    };
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setChatVoiceState("processing");
+      try {
+        recognition.abort();
+      } catch {}
+
+      // ユーザーの返答をチャットに追加
+      addChatMessage("user", transcript);
+
+      // スキップキーワード検出
+      if (/^スキップ$|^とばす$|^飛ばす$|^skip$/i.test(transcript.trim())) {
+        // 直前の質問項目を「スキップ」扱い（特に何も入れない）
+        addChatMessage("ai", "🤖 スキップしました。次へ進みます。");
+        setTimeout(() => askNextOrConfirm(), 400);
+        return;
+      }
+
+      // 現在の値を集めて parseTranscript に渡す
+      const currentValues = {
+        clubId,
+        distance,
+        nextLie: nextLie === "fw" ? null : nextLie, // "fw" デフォルトは未入力扱い
+        direction,
+        depth,
+        selfRating,
+        outcome,
+        isWedge,
+        wedgeTargetDistance,
+        wedgeDistance,
+        wedgeResults,
+        contact,
+      };
+      const { updates } = parseTranscript(transcript, currentValues);
+
+      // フィールドを更新
+      if ("clubId" in updates) setClubId(updates.clubId);
+      if ("distance" in updates) setDistance(updates.distance);
+      if ("lie" in updates) setLie(updates.lie);
+      if ("nextLie" in updates) setNextLie(updates.nextLie);
+      if ("direction" in updates) setDirection(updates.direction);
+      if ("depth" in updates) setDepth(updates.depth);
+      if ("selfRating" in updates) setSelfRating(updates.selfRating);
+      if ("outcome" in updates) setOutcome(updates.outcome);
+      if ("wedgeTargetDistance" in updates)
+        setWedgeTargetDistance(updates.wedgeTargetDistance);
+      if ("wedgeDistance" in updates)
+        setWedgeDistance(updates.wedgeDistance);
+      if ("wedgeResults" in updates) setWedgeResults(updates.wedgeResults);
+      if ("contact" in updates) setContact(updates.contact);
+
+      // 解析結果を表示してから次の質問へ
+      const updatedKeys = Object.keys(updates);
+      if (updatedKeys.length > 0) {
+        const summary = updatedKeys
+          .map((k) => {
+            const v = updates[k];
+            if (k === "clubId") {
+              const c = clubs.find((cc) => cc.id === v);
+              return `クラブ:${c?.name || v}`;
+            }
+            if (k === "distance") return `距離:${v}${unit}`;
+            if (k === "lie") return `ライ:${LIE_LABELS[v] || v}`;
+            if (k === "nextLie") return `着地:${LIE_LABELS[v] || v}`;
+            if (k === "direction") return `方向:${DIR_LABELS[v] || v}`;
+            if (k === "depth") return `距離感:${DEPTH_LABELS[v] || v}`;
+            if (k === "selfRating")
+              return `評価:${SELF_RATING_LABELS[v] || v}`;
+            if (k === "outcome") return `結果:${OUTCOME_LABELS[v] || v}`;
+            if (k === "contact") return `打感:${CONTACT_LABELS[v] || v}`;
+            if (k === "wedgeTargetDistance") return `ピンまで:${v}${unit}`;
+            if (k === "wedgeDistance") return `実距離:${v}${unit}`;
+            if (k === "wedgeResults")
+              return `結果:${(Array.isArray(v) ? v : []).join("+")}`;
+            return `${k}:${v}`;
+          })
+          .join(" / ");
+        addChatMessage("ai", `🤖 認識: ${summary}`);
+      }
+
+      // 次の質問または完了確認
+      setTimeout(() => askNextOrConfirm(), 600);
+    };
+
+    chatRecognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch (e) {
+      setChatVoiceState("idle");
+    }
+  };
+
+  // v3: 次の質問または完了確認
+  const askNextOrConfirm = () => {
+    const missing = getMissingFields();
+    const requiredMissing = missing.filter((m) => m.required);
+    if (requiredMissing.length > 0) {
+      addChatMessage("ai", requiredMissing[0].question);
+    } else if (missing.length > 0) {
+      // 任意項目の質問（スキップ可）
+      addChatMessage("ai", missing[0].question);
+    } else {
+      // 全部揃った
+      addChatMessage(
+        "ai",
+        "🤖 全項目の入力が完了しました。下の「保存」ボタンで保存してください。"
+      );
+    }
+  };
+
+  // v3: 対話で次の質問をトリガー（録音停止後）
+  const stopChatRecognition = () => {
+    if (chatRecognitionRef.current) {
+      try {
+        chatRecognitionRef.current.stop();
+      } catch {}
+    }
   };
 
   const startVoiceInput = () => {
@@ -3392,7 +4560,13 @@ function ShotEditor({
         depth,
         selfRating,
         outcome,
-        isReplay: isReplayShot,
+        // v2.1: ウェッジ専用フィールド
+        isWedge,
+        wedgeTargetDistance,
+        wedgeDistance,
+        wedgeResults, // 配列で渡す
+        // v2.1: 打感（通常クラブ・ウェッジ共通）
+        contact,
       };
       const { updates, matched } = parseTranscript(transcript, currentValues);
 
@@ -3404,7 +4578,14 @@ function ShotEditor({
       if ("depth" in updates) setDepth(updates.depth);
       if ("selfRating" in updates) setSelfRating(updates.selfRating);
       if ("outcome" in updates) setOutcome(updates.outcome);
-      if ("isReplay" in updates) setIsReplayShot(updates.isReplay);
+      // v2.1: ウェッジ専用
+      if ("wedgeTargetDistance" in updates)
+        setWedgeTargetDistance(updates.wedgeTargetDistance);
+      if ("wedgeDistance" in updates)
+        setWedgeDistance(updates.wedgeDistance);
+      if ("wedgeResults" in updates) setWedgeResults(updates.wedgeResults);
+      // v2.1: 打感
+      if ("contact" in updates) setContact(updates.contact);
 
       // ハイライト表示（2秒）
       setHighlightFields(matched);
@@ -3524,7 +4705,188 @@ function ShotEditor({
 
   const canSave = isPutter
     ? clubId && puttResult
+    : isWedge
+    ? clubId &&
+      (wedgeResults.length > 0 ||
+        wedgeDistance != null ||
+        wedgeTargetDistance != null)
     : clubId && outcome && lie;
+
+  // v3: 対話音声モード - チャット式UI
+  if (chatVoiceMode) {
+    const handleChatSave = () => {
+      // 既存の保存ロジックと同じデータを構築して送信
+      if (!clubId) return;
+      let saveData;
+      if (isWedge) {
+        saveData = {
+          clubId,
+          wedgeTargetDistance,
+          wedgeDistance,
+          wedgeResult: wedgeResults,
+          selfRating, // v2.4: ウェッジにも自己評価
+          contact,
+          memo,
+          outcome: "in_play",
+          excludeFromAvg: excludeFromAvgShot,
+        };
+      } else {
+        saveData = {
+          clubId,
+          distance,
+          lie,
+          nextLie,
+          direction,
+          depth,
+          selfRating,
+          outcome,
+          contact,
+          excludeFromAvg: excludeFromAvgShot,
+          memo,
+        };
+      }
+      onSave(saveData);
+    };
+
+    const missing = getMissingFields();
+    const requiredMissing = missing.filter((m) => m.required);
+    const canSaveChat = requiredMissing.length === 0 && clubId;
+
+    return (
+      <div className="sheet-backdrop" onClick={exitChatVoice}>
+        <div
+          className="sheet shot-sheet chat-sheet"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="sheet-handle" />
+          <div className="shot-sheet-head">
+            <div className="shot-sheet-title">
+              <span className="shot-sheet-num">#{shotNumber}</span>
+              <span className="shot-sheet-label">💬 対話音声入力</span>
+            </div>
+            <button className="icon-btn" onClick={exitChatVoice}>
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="chat-stream">
+            {chatMessages.map((m, i) => (
+              <div
+                key={i}
+                className={`chat-bubble chat-${m.role}`}
+              >
+                <div className="chat-bubble-text">{m.text}</div>
+              </div>
+            ))}
+            {chatVoiceState === "listening" && (
+              <div className="chat-bubble chat-user listening">
+                <div className="chat-bubble-text">🎙 録音中…</div>
+              </div>
+            )}
+            {chatVoiceState === "processing" && (
+              <div className="chat-bubble chat-ai">
+                <div className="chat-bubble-text">考え中…</div>
+              </div>
+            )}
+          </div>
+
+          {/* 解析済みの状態を視覚的にも表示 */}
+          <div className="chat-status">
+            {clubId && (
+              <span className="chat-chip">
+                ✅ {clubs.find((c) => c.id === clubId)?.name || "—"}
+              </span>
+            )}
+            {!isWedge && distance != null && (
+              <span className="chat-chip">
+                ✅ {distance}{unit}
+              </span>
+            )}
+            {!isWedge && lie && (
+              <span className="chat-chip">
+                ✅ {LIE_LABELS[lie] || lie}
+              </span>
+            )}
+            {!isWedge && nextLie && nextLie !== "fw" && (
+              <span className="chat-chip">
+                ✅ →{LIE_LABELS[nextLie] || nextLie}
+              </span>
+            )}
+            {!isWedge && direction && (
+              <span className="chat-chip">
+                ✅ {DIR_LABELS[direction]}
+              </span>
+            )}
+            {!isWedge && depth && (
+              <span className="chat-chip">
+                ✅ {DEPTH_LABELS[depth]}
+              </span>
+            )}
+            {!isWedge && selfRating && (
+              <span className="chat-chip">
+                ✅ {SELF_RATING_LABELS[selfRating]}
+              </span>
+            )}
+            {isWedge && wedgeTargetDistance != null && (
+              <span className="chat-chip">
+                ✅ ピンまで{wedgeTargetDistance}
+              </span>
+            )}
+            {isWedge && wedgeDistance != null && (
+              <span className="chat-chip">
+                ✅ 実{wedgeDistance}
+              </span>
+            )}
+            {isWedge && wedgeResults.length > 0 && (
+              <span className="chat-chip">
+                ✅ {wedgeResults.join("+")}
+              </span>
+            )}
+            {contact && (
+              <span className="chat-chip">
+                ✅ {CONTACT_LABELS[contact]}
+              </span>
+            )}
+          </div>
+
+          <div className="chat-actions">
+            <button
+              className={`chat-record-btn ${chatVoiceState}`}
+              onClick={
+                chatVoiceState === "listening"
+                  ? stopChatRecognition
+                  : startChatRecognition
+              }
+              disabled={chatVoiceState === "processing"}
+            >
+              {chatVoiceState === "listening"
+                ? "■ 停止"
+                : chatVoiceState === "processing"
+                ? "認識中…"
+                : "🎤 話す"}
+            </button>
+            <button
+              className="chat-skip-btn"
+              onClick={() => {
+                addChatMessage("user", "（スキップ）");
+                setTimeout(() => askNextOrConfirm(), 300);
+              }}
+              disabled={chatVoiceState !== "idle"}
+            >
+              ⏭ スキップ
+            </button>
+            <button
+              className="chat-save-btn"
+              onClick={handleChatSave}
+              disabled={!canSaveChat || chatVoiceState !== "idle"}
+            >
+              ✓ 保存
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="sheet-backdrop" onClick={onCancel}>
@@ -3540,34 +4902,46 @@ function ShotEditor({
           </button>
         </div>
 
-        {/* v2.1: 音声入力 */}
+        {/* v2.1/v3: 音声入力 - クイック + 対話 */}
         {speechSupported && (
           <div className="voice-input-section">
-            <button
-              className={`voice-input-btn ${voiceState}`}
-              onClick={
-                voiceState === "listening" ? stopVoiceInput : startVoiceInput
-              }
-              disabled={voiceState === "processing"}
-            >
-              <span className="voice-icon">
-                {voiceState === "listening" ? "■" : "🎤"}
-              </span>
-              <span className="voice-label">
-                {voiceState === "listening"
-                  ? "録音中… タップで停止"
-                  : voiceState === "processing"
-                  ? "認識中…"
-                  : voiceState === "error"
-                  ? voiceError
-                  : "音声で入力"}
-              </span>
-            </button>
+            <div className="voice-btn-group">
+              <button
+                className={`voice-input-btn quick ${voiceState}`}
+                onClick={
+                  voiceState === "listening" ? stopVoiceInput : startVoiceInput
+                }
+                disabled={voiceState === "processing"}
+              >
+                <span className="voice-icon">
+                  {voiceState === "listening" ? "■" : "🎤"}
+                </span>
+                <span className="voice-label">
+                  {voiceState === "listening"
+                    ? "録音中…"
+                    : voiceState === "processing"
+                    ? "認識中…"
+                    : voiceState === "error"
+                    ? voiceError
+                    : "クイック音声"}
+                </span>
+              </button>
+              <button
+                className="voice-input-btn chat"
+                onClick={startChatVoice}
+                disabled={voiceState !== "idle"}
+              >
+                <span className="voice-icon">💬</span>
+                <span className="voice-label">対話音声</span>
+              </button>
+            </div>
             {voiceTranscript && (
               <div className="voice-transcript">「{voiceTranscript}」</div>
             )}
             <div className="voice-hint">
-              例：「ドライバー 220ヤード フェアウェイ まあまあ」
+              <b>クイック</b>：一気に話す（例：「ドライバー 220ヤード フェアウェイ」）
+              <br />
+              <b>対話</b>：足りない項目をAIが順次質問（初心者向け）
             </div>
             <button
               className="voice-help-toggle"
@@ -3641,8 +5015,18 @@ function ShotEditor({
                   </div>
                 </div>
                 <div className="voice-help-cat">
-                  <div className="voice-help-cat-name">↻ 打ち直し</div>
-                  <div className="voice-help-words">打ち直し / 打ちなおし</div>
+                  <div className="voice-help-cat-name">💥 打感</div>
+                  <div className="voice-help-words">
+                    ナイス / ダフリ / ダフった / トップ / シャンク
+                  </div>
+                </div>
+                <div className="voice-help-cat">
+                  <div className="voice-help-cat-name">🎯 ウェッジ専用</div>
+                  <div className="voice-help-words">
+                    距離: 「<b>ピンまで</b> 50ヤード 55ヤード」<br />
+                    （「ピンまで」キーワード = ピンまで距離、もう一つの数字 = 実距離）<br />
+                    結果: カップイン / 乗った / ショート / オーバー / 左外し / 右外し
+                  </div>
                 </div>
                 <div className="voice-help-note">
                   ⚠️ 既に入力されている項目は音声入力で上書きされません。
@@ -3677,7 +5061,7 @@ function ShotEditor({
           </div>
         </div>
 
-        {!isPutter && (
+        {!isPutter && !isWedge && (
           <>
         <div className={`editor-section ${highlightFields.distance ? "highlight" : ""}`}>
           <div className="editor-label">飛距離</div>
@@ -3808,6 +5192,29 @@ function ShotEditor({
           </div>
         </div>
 
+        <div className="editor-section">
+          <div className="editor-label">打感（任意）</div>
+          <div className="contact-row">
+            {[
+              { id: "nice", label: "ナイス", tone: "good" },
+              { id: "duff", label: "ダフリ", tone: "miss" },
+              { id: "top", label: "トップ", tone: "miss" },
+              { id: "shank", label: "シャンク", tone: "miss" },
+            ].map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className={`chip contact-chip tone-${c.tone} ${
+                  contact === c.id ? "on" : ""
+                }`}
+                onClick={() => setContact(contact === c.id ? null : c.id)}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className={`editor-section ${highlightFields.outcome ? "highlight" : ""}`}>
           <div className="editor-label">結果</div>
           <div className="outcome-row">
@@ -3825,19 +5232,6 @@ function ShotEditor({
           </div>
         </div>
 
-        <div className={`editor-section ${highlightFields.isReplay ? "highlight" : ""}`}>
-          <label className="replay-toggle">
-            <input
-              type="checkbox"
-              checked={isReplayShot}
-              onChange={(e) => setIsReplayShot(e.target.checked)}
-            />
-            <span className="replay-toggle-text">
-              <b>打ち直し</b>（OB等の後の再ショット・距離・ミス率分析から完全除外）
-            </span>
-          </label>
-        </div>
-
         <div className="editor-section">
           <label className="replay-toggle">
             <input
@@ -3846,7 +5240,7 @@ function ShotEditor({
               onChange={(e) => setExcludeFromAvgShot(e.target.checked)}
             />
             <span className="replay-toggle-text">
-              <b>平均距離から除外</b>（ミス率にはカウントする / 自己評価では拾えないミス用）
+              <b>平均距離から除外</b>（ミス率にはカウント / 打ち直し・想定外ミスなど）
             </span>
           </label>
         </div>
@@ -3949,9 +5343,9 @@ function ShotEditor({
               <div className="editor-label">ライン読み（曲がり）</div>
               <div className="chip-row">
                 {[
-                  { id: "hook", label: "↙ フック（左へ）" },
-                  { id: "straight", label: "↑ ストレート" },
-                  { id: "slice", label: "↘ スライス（右へ）" },
+                  { id: "hook", label: "↙ フック" },
+                  { id: "straight", label: "↑ 直" },
+                  { id: "slice", label: "↘ スライス" },
                 ].map((s) => (
                   <button
                     key={s.id}
@@ -3973,8 +5367,8 @@ function ShotEditor({
               <div className="editor-label">結果</div>
               <div className="putt-result-grid">
                 {[
-                  { id: "in", label: "🎯 カップイン", tone: "good" },
-                  { id: "ok", label: "OK圏内（〜30cm）", tone: "ok" },
+                  { id: "in", label: "🎯 IN", tone: "good" },
+                  { id: "ok", label: "OK圏内", tone: "ok" },
                   { id: "short", label: "↓ ショート", tone: "miss" },
                   { id: "over", label: "↑ オーバー", tone: "miss" },
                   { id: "left", label: "← 左外し", tone: "miss" },
@@ -3992,6 +5386,245 @@ function ShotEditor({
                   </button>
                 ))}
               </div>
+            </div>
+          </>
+        )}
+
+        {/* v2.1: ウェッジ専用UI（コントロールショット扱い、フルとは区別しない） */}
+        {isWedge && (
+          <>
+            <div className="editor-section">
+              <div className="editor-label">ピンまで（{unit}）</div>
+              <div className="distance-display">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  className="distance-input-large"
+                  value={wedgeTargetDistance ?? ""}
+                  placeholder="50"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setWedgeTargetDistance(v === "" ? null : Number(v));
+                  }}
+                />
+                <span className="distance-unit-large">{unit}</span>
+              </div>
+              <div className="putt-distance-shortcuts">
+                {[20, 30, 50, 70, 90, 110].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    className={`putt-shortcut ${
+                      wedgeTargetDistance === d ? "on" : ""
+                    }`}
+                    onClick={() => setWedgeTargetDistance(d)}
+                  >
+                    {d}{unit}
+                  </button>
+                ))}
+              </div>
+              <div className="wedge-adjust-row">
+                {[-5, -1, 1, 5].map((delta) => (
+                  <button
+                    key={delta}
+                    type="button"
+                    className={`wedge-adjust-btn ${
+                      delta < 0 ? "minus" : "plus"
+                    }`}
+                    onClick={() => {
+                      const cur = wedgeTargetDistance ?? 0;
+                      const next = Math.max(0, cur + delta);
+                      setWedgeTargetDistance(next);
+                    }}
+                  >
+                    {delta > 0 ? `+${delta}` : delta}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="editor-section">
+              <div className="editor-label">
+                実距離（{unit}）
+                {wedgeTargetDistance != null &&
+                  wedgeDistance != null && (
+                    <span
+                      className={`wedge-diff-badge ${
+                        wedgeDistance > wedgeTargetDistance
+                          ? "long"
+                          : wedgeDistance < wedgeTargetDistance
+                          ? "short"
+                          : "perfect"
+                      }`}
+                    >
+                      {wedgeDistance === wedgeTargetDistance
+                        ? "ぴったり"
+                        : wedgeDistance > wedgeTargetDistance
+                        ? `+${wedgeDistance - wedgeTargetDistance}${unit} 長め`
+                        : `${wedgeDistance - wedgeTargetDistance}${unit} 短め`}
+                    </span>
+                  )}
+              </div>
+              <div className="distance-display">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  className="distance-input-large"
+                  value={wedgeDistance ?? ""}
+                  placeholder="50"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setWedgeDistance(v === "" ? null : Number(v));
+                  }}
+                />
+                <span className="distance-unit-large">{unit}</span>
+              </div>
+              <div className="putt-distance-shortcuts">
+                {[20, 30, 50, 70, 90, 110].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    className={`putt-shortcut ${
+                      wedgeDistance === d ? "on" : ""
+                    }`}
+                    onClick={() => setWedgeDistance(d)}
+                  >
+                    {d}{unit}
+                  </button>
+                ))}
+              </div>
+              <div className="wedge-adjust-row">
+                {[-5, -1, 1, 5].map((delta) => (
+                  <button
+                    key={delta}
+                    type="button"
+                    className={`wedge-adjust-btn ${
+                      delta < 0 ? "minus" : "plus"
+                    }`}
+                    onClick={() => {
+                      const cur = wedgeDistance ?? 0;
+                      const next = Math.max(0, cur + delta);
+                      setWedgeDistance(next);
+                    }}
+                  >
+                    {delta > 0 ? `+${delta}` : delta}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="editor-section">
+              <div className="editor-label">結果（任意・複数選択可）</div>
+              <div className="wedge-result-groups">
+                {[
+                  {
+                    label: "状態",
+                    options: [
+                      { id: "pin", label: "🎯 カップイン", tone: "good" },
+                      { id: "green", label: "○ グリーン乗", tone: "ok" },
+                    ],
+                  },
+                  {
+                    label: "距離",
+                    options: [
+                      { id: "short", label: "↓ ショート", tone: "miss" },
+                      { id: "over", label: "↑ オーバー", tone: "miss" },
+                    ],
+                  },
+                  {
+                    label: "方向",
+                    options: [
+                      { id: "left", label: "← 左外し", tone: "miss" },
+                      { id: "right", label: "→ 右外し", tone: "miss" },
+                    ],
+                  },
+                ].map((group) => (
+                  <div key={group.label} className="wedge-result-group">
+                    <div className="wedge-result-group-label">
+                      {group.label}
+                    </div>
+                    <div className="wedge-result-group-chips">
+                      {group.options.map((r) => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          className={`chip putt-result-chip tone-${r.tone} ${
+                            wedgeResults.includes(r.id) ? "on" : ""
+                          }`}
+                          onClick={() => {
+                            // 同じグループの他の選択肢を排除しつつトグル
+                            const groupIds = group.options.map((o) => o.id);
+                            const isOn = wedgeResults.includes(r.id);
+                            const next = wedgeResults.filter(
+                              (id) => !groupIds.includes(id)
+                            );
+                            if (!isOn) next.push(r.id);
+                            setWedgeResults(next);
+                          }}
+                        >
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="editor-section">
+              <div className="editor-label">自己評価（任意）</div>
+              <div className="result-row">
+                {SELF_RATINGS.map((r) => (
+                  <button
+                    key={r.id}
+                    className={`result-btn tone-${r.tone} ${
+                      selfRating === r.id ? "on" : ""
+                    }`}
+                    onClick={() =>
+                      setSelfRating(selfRating === r.id ? null : r.id)
+                    }
+                    title={r.desc}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="editor-section">
+              <div className="editor-label">打感（任意）</div>
+              <div className="contact-row">
+                {[
+                  { id: "nice", label: "ナイス", tone: "good" },
+                  { id: "duff", label: "ダフリ", tone: "miss" },
+                  { id: "top", label: "トップ", tone: "miss" },
+                  { id: "shank", label: "シャンク", tone: "miss" },
+                ].map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`chip contact-chip tone-${c.tone} ${
+                      contact === c.id ? "on" : ""
+                    }`}
+                    onClick={() => setContact(contact === c.id ? null : c.id)}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="editor-section">
+              <label className="replay-toggle">
+                <input
+                  type="checkbox"
+                  checked={excludeFromAvgShot}
+                  onChange={(e) => setExcludeFromAvgShot(e.target.checked)}
+                />
+                <span className="replay-toggle-text">
+                  <b>平均距離から除外</b>（ミス率にはカウント / 想定外ミスなど）
+                </span>
+              </label>
             </div>
           </>
         )}
@@ -4036,6 +5669,20 @@ function ShotEditor({
                         // v2.1: 複数打を一括記録するための打数（編集モードでは無視）
                         _puttCount: mode === "edit" ? 1 : puttCount,
                       }
+                    : isWedge
+                    ? {
+                        // ウェッジ専用フィールド（コントロールショット扱い）
+                        clubId,
+                        wedgeTargetDistance,
+                        wedgeDistance,
+                        wedgeResult: wedgeResults, // v2.1: 配列として保存
+                        selfRating, // v2.4: ウェッジにも自己評価
+                        contact,
+                        memo,
+                        // outcome は in_play 固定（ウェッジは結果をwedgeResultで管理）
+                        outcome: "in_play",
+                        excludeFromAvg: excludeFromAvgShot,
+                      }
                     : {
                         clubId,
                         distance,
@@ -4045,7 +5692,7 @@ function ShotEditor({
                         depth,
                         selfRating,
                         outcome,
-                        isReplay: isReplayShot,
+                        contact,
                         excludeFromAvg: excludeFromAvgShot,
                         memo,
                       }
@@ -4074,8 +5721,12 @@ function EmptyAnalytics() {
 // ============================================================
 //  ANALYTICS
 // ============================================================
-function AnalyticsView({ state, onBack }) {
-  const [tab, setTab] = useState("distance");
+function AnalyticsView({ state, setState, onBack }) {
+  const [tab, setTab] = useState("shot");
+  // v2.1: クラブ詳細画面の選択クラブID（null = リスト表示）
+  const [selectedClubId, setSelectedClubId] = useState(null);
+  // v2.1: ラウンド詳細画面の選択ラウンドID（null = リスト表示）
+  const [selectedRoundId, setSelectedRoundId] = useState(null);
   const stats = useMemo(() => computeClubStats(state), [state]);
   // 分析対象はウェッジとパター以外のクラブのみ
   // （アプローチ・パターは性質が異なるため、距離分析・ミス率分析の対象外）
@@ -4085,6 +5736,31 @@ function AnalyticsView({ state, onBack }) {
       s.club.category !== "putter" &&
       s.club.category !== "wedge"
   );
+  // v2.1: ウェッジ専用統計
+  const wedgeStats = useMemo(() => computeWedgeStats(state), [state]);
+  const usedWedges = wedgeStats.filter((s) => s.n > 0);
+
+  // v2.1: クラブ詳細画面表示時はそれを返す
+  if (selectedClubId) {
+    return (
+      <ClubDetailView
+        clubId={selectedClubId}
+        state={state}
+        onBack={() => setSelectedClubId(null)}
+      />
+    );
+  }
+  // v2.1: ラウンド詳細画面表示時はそれを返す
+  if (selectedRoundId) {
+    return (
+      <RoundDetailView
+        roundId={selectedRoundId}
+        state={state}
+        setState={setState}
+        onBack={() => setSelectedRoundId(null)}
+      />
+    );
+  }
 
   return (
     <div className="screen">
@@ -4103,10 +5779,22 @@ function AnalyticsView({ state, onBack }) {
 
       <div className="analytics-tabs">
         <button
-          className={`atab ${tab === "distance" ? "on" : ""}`}
-          onClick={() => setTab("distance")}
+          className={`atab ${tab === "shot" ? "on" : ""}`}
+          onClick={() => setTab("shot")}
         >
-          距離
+          ショット
+        </button>
+        <button
+          className={`atab ${tab === "wedge" ? "on" : ""}`}
+          onClick={() => setTab("wedge")}
+        >
+          ウェッジ
+        </button>
+        <button
+          className={`atab ${tab === "putter" ? "on" : ""}`}
+          onClick={() => setTab("putter")}
+        >
+          パター
         </button>
         <button
           className={`atab ${tab === "tendency" ? "on" : ""}`}
@@ -4122,18 +5810,167 @@ function AnalyticsView({ state, onBack }) {
         </button>
       </div>
 
-      {tab === "distance" && (
-        <DistanceTab usedClubs={usedClubs} unit={state.unit} state={state} />
+      {tab === "shot" && (
+        <ShotTab
+          usedClubs={usedClubs}
+          unit={state.unit}
+          state={state}
+          onClubClick={(clubId) => setSelectedClubId(clubId)}
+        />
       )}
+      {tab === "wedge" && (
+        <WedgeTab usedWedges={usedWedges} unit={state.unit} />
+      )}
+      {tab === "putter" && <PutterTab state={state} />}
       {tab === "tendency" && (
         <TendencyTab usedClubs={usedClubs} state={state} />
       )}
-      {tab === "rounds" && <RoundsTab state={state} />}
+      {tab === "rounds" && (
+        <RoundsTab
+          state={state}
+          onRoundClick={(roundId) => setSelectedRoundId(roundId)}
+        />
+      )}
     </div>
   );
 }
 
-function DistanceTab({ usedClubs, unit, state }) {
+// v2.1: ウェッジ専用タブ
+function WedgeTab({ usedWedges, unit }) {
+  if (usedWedges.length === 0) return <EmptyAnalytics />;
+  return (
+    <>
+      <div className="distance-hint">
+        💡 <b>ウェッジ分析</b>＝コントロールショット（寄せ）の傾向
+        <br />
+        <b>カップイン率</b>＝カップインに収まった割合 / <b>ミス率</b>＝ショート・オーバー・左右外し・想定外ミスの割合
+        <br />
+        <b>距離精度</b>＝ピンまで距離と実距離の差（絶対誤差で精度、符号付き平均で長め/短めのクセ）
+        <br />
+        <span className="distance-hint-note">
+          ※ ウェッジは全てコントロールショット扱い。フルショットも記録するならアイアンとして登録してください
+        </span>
+      </div>
+      <div className="section">
+        <div className="section-head">
+          <div className="section-title">クラブ別の傾向</div>
+        </div>
+        <div className="wedge-cards">
+          {usedWedges.map((s) => {
+            const total = s.n;
+            const rc = s.resultCounts;
+            const signedSign =
+              s.signedMeanDiff > 0
+                ? "+"
+                : s.signedMeanDiff < 0
+                ? ""
+                : "±";
+            const signedTrend =
+              s.signedMeanDiff > 0
+                ? "長め"
+                : s.signedMeanDiff < 0
+                ? "短め"
+                : "ぴったり";
+            return (
+              <div key={s.club.id} className="wedge-card">
+                <div className="wedge-card-head">
+                  <div className="wedge-card-club">{s.club.name}</div>
+                  <div className="wedge-card-n">{s.n}回</div>
+                </div>
+                <div className="wedge-card-stats">
+                  <div className="wedge-stat">
+                    <div className="wedge-stat-label">平均距離</div>
+                    <div className="wedge-stat-value">
+                      {s.trimmed != null ? `${s.trimmed} ${unit}` : "—"}
+                    </div>
+                  </div>
+                  <div className="wedge-stat">
+                    <div className="wedge-stat-label">レンジ</div>
+                    <div className="wedge-stat-value">
+                      {s.min != null ? `${s.min}–${s.max}` : "—"}
+                    </div>
+                  </div>
+                  <div className="wedge-stat">
+                    <div className="wedge-stat-label">カップイン率</div>
+                    <div className="wedge-stat-value good">
+                      {total ? `${Math.round((rc.pin / total) * 100)}%` : "—"}
+                    </div>
+                  </div>
+                  <div className="wedge-stat">
+                    <div className="wedge-stat-label">ミス率</div>
+                    <div
+                      className={`wedge-stat-value ${
+                        s.missRate > 40 ? "miss" : ""
+                      }`}
+                    >
+                      {s.missRate != null ? `${s.missRate}%` : "—"}
+                    </div>
+                  </div>
+                  {/* v2.1: ピンまで vs 実距離の精度（データがある時のみ表示） */}
+                  {s.diffN > 0 && (
+                    <>
+                      <div className="wedge-stat">
+                        <div className="wedge-stat-label">
+                          絶対誤差 ({s.diffN}回)
+                        </div>
+                        <div className="wedge-stat-value">
+                          ±{s.absMeanDiff} {unit}
+                        </div>
+                      </div>
+                      <div className="wedge-stat">
+                        <div className="wedge-stat-label">クセ</div>
+                        <div
+                          className={`wedge-stat-value ${
+                            s.signedMeanDiff > 0
+                              ? "miss"
+                              : s.signedMeanDiff < 0
+                              ? "miss"
+                              : "good"
+                          }`}
+                        >
+                          {signedSign}
+                          {s.signedMeanDiff} {unit}
+                          <span className="wedge-stat-sub">{signedTrend}</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="wedge-result-bar">
+                  {[
+                    { key: "pin", color: "good", label: "IN" },
+                    { key: "green", color: "ok", label: "乗" },
+                    { key: "short", color: "miss", label: "短" },
+                    { key: "over", color: "miss", label: "長" },
+                    { key: "left", color: "miss", label: "左" },
+                    { key: "right", color: "miss", label: "右" },
+                  ].map((r) => {
+                    const count = rc[r.key];
+                    if (count === 0) return null;
+                    const pct = (count / total) * 100;
+                    return (
+                      <div
+                        key={r.key}
+                        className={`wedge-result-segment tone-${r.color}`}
+                        style={{ width: `${pct}%` }}
+                        title={`${r.label}: ${count}回 (${Math.round(pct)}%)`}
+                      >
+                        {pct > 12 ? `${r.label}${count}` : ""}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// v2.1: ショットタブ（クラブリスト形式、タップで詳細画面へ）
+function ShotTab({ usedClubs, unit, state, onClubClick }) {
   if (usedClubs.length === 0) return <EmptyAnalytics />;
   const maxDist = Math.max(1, ...usedClubs.map((s) => s.max || 0));
   return (
@@ -4146,97 +5983,963 @@ function DistanceTab({ usedClubs, unit, state }) {
         />
       </div>
       <div className="distance-hint">
-        💡 <b>信頼距離</b>＝外れ値を除外した平均「当たればこの距離」／
-        <b>ミス率</b>＝そのクラブで打って△・✕評価 or ペナ（OB等）になった割合
+        💡 <b>クラブをタップ</b>すると、そのクラブの詳細分析画面に移動します
+        <br />
+        <b>信頼距離</b>＝外れ値を除外した「当たればこの距離」／
+        <b>ミス率</b>＝△・✕評価 or ペナ（OB等）の割合
         <br />
         <span className="distance-hint-note">
-          ※ ウェッジ・パターは除外（アプローチ・パットは性質が異なるため）
-          <br />
-          ※ ショット入力時に <b>「平均距離から除外」</b> をONにすると、
-          そのショットは平均からは外しつつミス率にはカウントできます
+          ※ ウェッジ・パターは別タブ
         </span>
       </div>
-      <div className="distance-chart">
-        {usedClubs
-          .filter((s) => s.trimmed != null)
-          .map((s) => {
-            const pctTrim = ((s.trimmed || 0) / maxDist) * 100;
-            const pctMin = ((s.min || 0) / maxDist) * 100;
-            const pctMax = ((s.max || 0) / maxDist) * 100;
-            return (
-              <div key={s.club.id} className="dchart-row">
-                <div className="dchart-club">{s.club.name}</div>
-                <div className="dchart-track">
-                  <div
-                    className="dchart-range"
-                    style={{ left: `${pctMin}%`, width: `${pctMax - pctMin}%` }}
-                  />
-                  <div className="dchart-trim" style={{ left: `${pctTrim}%` }}>
-                    <span className="dchart-trim-num">{s.trimmed}</span>
+      <div className="club-list">
+        {usedClubs.map((s) => {
+          const pctTrim = s.trimmed
+            ? ((s.trimmed || 0) / maxDist) * 100
+            : 0;
+          return (
+            <button
+              key={s.club.id}
+              type="button"
+              className="club-list-item"
+              onClick={() => onClubClick(s.club.id)}
+            >
+              <div className="club-list-head">
+                <div className="club-list-name">{s.club.name}</div>
+                <div className="club-list-n">{s.n}回</div>
+              </div>
+              <div className="club-list-stats">
+                <div className="club-list-stat">
+                  <div className="club-list-stat-label">信頼距離</div>
+                  <div className="club-list-stat-value">
+                    {s.trimmed != null ? (
+                      <>
+                        <span className="num-large">{s.trimmed}</span>
+                        <span className="num-unit">{unit}</span>
+                      </>
+                    ) : (
+                      "—"
+                    )}
                   </div>
                 </div>
-                <div className="dchart-n">{s.n}</div>
+                <div className="club-list-stat">
+                  <div className="club-list-stat-label">レンジ</div>
+                  <div className="club-list-stat-value small">
+                    {s.min != null ? `${s.min}–${s.max}` : "—"}
+                  </div>
+                </div>
+                <div className="club-list-stat">
+                  <div className="club-list-stat-label">ミス率</div>
+                  <div
+                    className={`club-list-stat-value ${
+                      s.missRate > 40 ? "miss" : ""
+                    }`}
+                  >
+                    {s.missRate != null ? `${s.missRate}%` : "—"}
+                  </div>
+                </div>
               </div>
-            );
-          })}
+              {s.trimmed != null && (
+                <div className="club-list-bar">
+                  <div
+                    className="club-list-bar-fill"
+                    style={{ width: `${pctTrim}%` }}
+                  />
+                </div>
+              )}
+              <div className="club-list-arrow">›</div>
+            </button>
+          );
+        })}
       </div>
+    </>
+  );
+}
+
+// v2.1: パター専用タブ
+function PutterTab({ state }) {
+  const stats = useMemo(() => computePutterStats(state), [state]);
+  if (!stats || stats.n === 0) return <EmptyAnalytics />;
+
+  const PUTT_RESULT_LABELS = {
+    in: { label: "🎯 IN", tone: "good" },
+    ok: { label: "OK圏内", tone: "ok" },
+    short: { label: "ショート", tone: "miss" },
+    over: { label: "オーバー", tone: "miss" },
+    left: { label: "左外し", tone: "miss" },
+    right: { label: "右外し", tone: "miss" },
+  };
+
+  return (
+    <>
+      <div className="distance-hint">
+        💡 <b>パター分析</b>＝距離別・傾斜別・曲がり別の成功率
+        <br />
+        <b>IN率</b>＝カップインした割合 / <b>OK率</b>＝カップインまたはOK圏内の割合
+        <br />
+        <span className="distance-hint-note">
+          ※ 距離・傾斜・曲がりが入力されているパターのみ集計
+        </span>
+      </div>
+
+      {/* サマリ */}
       <div className="section">
         <div className="section-head">
-          <div className="section-title">詳細データ</div>
+          <div className="section-title">サマリ</div>
         </div>
-        <div className="stat-table">
-          <div className="stat-table-head">
-            <div>クラブ</div>
-            <div>信頼距離</div>
-            <div>中央値</div>
-            <div>レンジ</div>
-            <div>ミス率</div>
-            <div>n</div>
+        <div className="club-detail-stats">
+          <div className="cd-stat">
+            <div className="cd-stat-label">総パット数</div>
+            <div className="cd-stat-value">
+              <span className="num-large">{stats.n}</span>
+            </div>
           </div>
-          {usedClubs.map((s) => (
-            <div key={s.club.id} className="stat-table-row">
-              <div className="st-club">{s.club.name}</div>
-              <div className="st-trim">{s.trimmed ?? "—"}</div>
-              <div>{s.median ?? "—"}</div>
-              <div className="st-range">
-                {s.min != null ? `${s.min}–${s.max}` : "—"}
+          <div className="cd-stat">
+            <div className="cd-stat-label">18H平均</div>
+            <div className="cd-stat-value">
+              {stats.avgPuttsPer18 != null ? (
+                <>
+                  <span className="num-large">{stats.avgPuttsPer18}</span>
+                  <span className="num-unit">パット</span>
+                </>
+              ) : (
+                "—"
+              )}
+            </div>
+          </div>
+          <div className="cd-stat">
+            <div className="cd-stat-label">IN率（全体）</div>
+            <div className="cd-stat-value good">
+              {stats.n
+                ? Math.round((stats.resultCounts.in / stats.n) * 100) + "%"
+                : "—"}
+            </div>
+          </div>
+          <div className="cd-stat">
+            <div className="cd-stat-label">分析対象ラウンド</div>
+            <div className="cd-stat-value small">
+              {stats.totalRounds}回
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 距離別の成功率 */}
+      <div className="section">
+        <div className="section-head">
+          <div className="section-title">距離別の成功率</div>
+        </div>
+        <div className="putter-bucket-list">
+          {stats.byDistance.map((b) => (
+            <div key={b.id} className="putter-bucket-row">
+              <div className="putter-bucket-label">{b.label}</div>
+              <div className="putter-bucket-n">{b.n}回</div>
+              <div className="putter-bucket-bars">
+                {b.n > 0 && (
+                  <>
+                    <div className="putter-bucket-bar-track">
+                      <div
+                        className="putter-bucket-bar-fill in"
+                        style={{ width: `${b.inRate}%` }}
+                      />
+                    </div>
+                    <div className="putter-bucket-rate">
+                      IN {b.inRate}% / OK {b.okRate}%
+                    </div>
+                  </>
+                )}
+                {b.n === 0 && <div className="putter-bucket-empty">—</div>}
               </div>
-              <div className={`st-miss ${s.missRate > 40 ? "high" : ""}`}>
-                {s.missRate != null ? `${s.missRate}%` : "—"}
-              </div>
-              <div className="st-n">{s.n}</div>
             </div>
           ))}
         </div>
       </div>
-      <div className="section">
-        <div className="section-head">
-          <div className="section-title">ライ別距離（FW / ラフ）</div>
-        </div>
-        <div className="lie-grid">
-          {usedClubs
-            .filter((s) => s.fwAvg != null || s.roughAvg != null)
-            .map((s) => (
-              <div key={s.club.id} className="lie-card">
-                <div className="lie-card-club">{s.club.name}</div>
-                <div className="lie-card-row">
-                  <div className="lie-card-label">FW</div>
-                  <div className="lie-card-num">{s.fwAvg ?? "—"}</div>
+
+      {/* 傾斜別 */}
+      {stats.bySlope.some((s) => s.n > 0) && (
+        <div className="section">
+          <div className="section-head">
+            <div className="section-title">傾斜別の成功率</div>
+          </div>
+          <div className="putter-bucket-list">
+            {stats.bySlope.map((s) => (
+              <div key={s.id} className="putter-bucket-row">
+                <div className="putter-bucket-label">{s.label}</div>
+                <div className="putter-bucket-n">{s.n}回</div>
+                <div className="putter-bucket-bars">
+                  {s.n > 0 ? (
+                    <>
+                      <div className="putter-bucket-bar-track">
+                        <div
+                          className="putter-bucket-bar-fill in"
+                          style={{ width: `${s.inRate}%` }}
+                        />
+                      </div>
+                      <div className="putter-bucket-rate">
+                        IN {s.inRate}% / OK {s.okRate}%
+                      </div>
+                    </>
+                  ) : (
+                    <div className="putter-bucket-empty">—</div>
+                  )}
                 </div>
-                <div className="lie-card-row">
-                  <div className="lie-card-label">ラフ</div>
-                  <div className="lie-card-num rough">{s.roughAvg ?? "—"}</div>
-                </div>
-                {s.fwAvg != null && s.roughAvg != null && (
-                  <div className="lie-card-diff">
-                    差 {Math.round(s.fwAvg - s.roughAvg)} {unit}
-                  </div>
-                )}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* 曲がり別 */}
+      {stats.byCurve.some((s) => s.n > 0) && (
+        <div className="section">
+          <div className="section-head">
+            <div className="section-title">曲がり別の成功率</div>
+          </div>
+          <div className="putter-bucket-list">
+            {stats.byCurve.map((s) => (
+              <div key={s.id} className="putter-bucket-row">
+                <div className="putter-bucket-label">{s.label}</div>
+                <div className="putter-bucket-n">{s.n}回</div>
+                <div className="putter-bucket-bars">
+                  {s.n > 0 ? (
+                    <>
+                      <div className="putter-bucket-bar-track">
+                        <div
+                          className="putter-bucket-bar-fill in"
+                          style={{ width: `${s.inRate}%` }}
+                        />
+                      </div>
+                      <div className="putter-bucket-rate">
+                        IN {s.inRate}% / OK {s.okRate}%
+                      </div>
+                    </>
+                  ) : (
+                    <div className="putter-bucket-empty">—</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 結果分布（全体） */}
+      <div className="section">
+        <div className="section-head">
+          <div className="section-title">結果の分布</div>
+        </div>
+        <div className="cd-outcome-list">
+          {Object.entries(PUTT_RESULT_LABELS).map(([key, info]) => {
+            const count = stats.resultCounts[key] || 0;
+            if (count === 0) return null;
+            const pct = Math.round((count / stats.n) * 100);
+            return (
+              <div key={key} className="cd-outcome-row">
+                <div className={`cd-outcome-label tone-${info.tone}`}>
+                  {info.label}
+                </div>
+                <div className="cd-outcome-bar">
+                  <div
+                    className={`cd-outcome-fill tone-${info.tone}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <div className="cd-outcome-count">
+                  {count}回 ({pct}%)
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
+
+      <div style={{ height: "40px" }} />
     </>
+  );
+}
+
+// v2.1: クラブ詳細画面
+function ClubDetailView({ clubId, state, onBack }) {
+  const club = state.clubs.find((c) => c.id === clubId);
+  const stats = useMemo(() => computeClubStats(state), [state]);
+  const clubStats = stats.find((s) => s.club.id === clubId);
+
+  // このクラブのショット集合（ラウンド・ホール情報込み）
+  const shotEntries = useMemo(() => {
+    const entries = [];
+    state.rounds.forEach((r) => {
+      r.holes.forEach((h) => {
+        h.shots.forEach((s, shotIdx) => {
+          if (s.clubId === clubId) {
+            entries.push({
+              shot: s,
+              round: r,
+              hole: h,
+              shotIdx,
+            });
+          }
+        });
+      });
+    });
+    return entries;
+  }, [state, clubId]);
+
+  // メモ付きショットを新しい順に並べる
+  const memoEntries = useMemo(() => {
+    return shotEntries
+      .filter((e) => e.shot.memo && e.shot.memo.trim() !== "")
+      .sort((a, b) => {
+        const da = new Date(a.round.date).getTime();
+        const db = new Date(b.round.date).getTime();
+        return db - da;
+      });
+  }, [shotEntries]);
+
+  // 結果分布
+  const outcomeCounts = useMemo(() => {
+    const counts = {};
+    shotEntries.forEach((e) => {
+      const oc = getShotOutcome(e.shot);
+      counts[oc] = (counts[oc] || 0) + 1;
+    });
+    return counts;
+  }, [shotEntries]);
+
+  // 自己評価分布
+  const ratingCounts = useMemo(() => {
+    const counts = {};
+    shotEntries.forEach((e) => {
+      const r = getShotSelfRating(e.shot);
+      if (r) counts[r] = (counts[r] || 0) + 1;
+    });
+    return counts;
+  }, [shotEntries]);
+
+  // v2.1: 打感分布
+  const contactCounts = useMemo(() => {
+    const counts = {};
+    shotEntries.forEach((e) => {
+      const c = e.shot.contact;
+      if (c) counts[c] = (counts[c] || 0) + 1;
+    });
+    return counts;
+  }, [shotEntries]);
+  const contactN = Object.values(contactCounts).reduce((a, b) => a + b, 0);
+
+  if (!club || !clubStats) {
+    return (
+      <div className="screen">
+        <header className="topbar">
+          <button className="icon-btn" onClick={onBack}>
+            <ChevronLeft size={22} />
+          </button>
+          <div className="topbar-title">
+            <div className="topbar-course">クラブ詳細</div>
+          </div>
+          <div className="icon-btn placeholder" />
+        </header>
+        <EmptyAnalytics />
+      </div>
+    );
+  }
+
+  const unit = state.unit;
+  const totalDir = clubStats.dir.n;
+  const totalDepth = clubStats.depth.n;
+
+  return (
+    <div className="screen">
+      <header className="topbar">
+        <button className="icon-btn" onClick={onBack}>
+          <ChevronLeft size={22} />
+        </button>
+        <div className="topbar-title">
+          <div className="topbar-course">{club.name}</div>
+          <div className="topbar-meta">{clubStats.n} ショット</div>
+        </div>
+        <div className="icon-btn placeholder" />
+      </header>
+
+      {/* 基本統計 */}
+      <div className="section">
+        <div className="section-head">
+          <div className="section-title">基本統計</div>
+        </div>
+        <div className="club-detail-stats">
+          <div className="cd-stat">
+            <div className="cd-stat-label">信頼距離</div>
+            <div className="cd-stat-value">
+              {clubStats.trimmed != null ? (
+                <>
+                  <span className="num-large">{clubStats.trimmed}</span>
+                  <span className="num-unit">{unit}</span>
+                </>
+              ) : (
+                "—"
+              )}
+            </div>
+          </div>
+          <div className="cd-stat">
+            <div className="cd-stat-label">中央値</div>
+            <div className="cd-stat-value">
+              {clubStats.median != null
+                ? `${clubStats.median} ${unit}`
+                : "—"}
+            </div>
+          </div>
+          <div className="cd-stat">
+            <div className="cd-stat-label">レンジ</div>
+            <div className="cd-stat-value small">
+              {clubStats.min != null
+                ? `${clubStats.min} – ${clubStats.max}`
+                : "—"}
+            </div>
+          </div>
+          <div className="cd-stat">
+            <div className="cd-stat-label">ミス率</div>
+            <div
+              className={`cd-stat-value ${
+                clubStats.missRate > 40 ? "miss" : ""
+              }`}
+            >
+              {clubStats.missRate != null
+                ? `${clubStats.missRate}%`
+                : "—"}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ライ別距離 */}
+      {(clubStats.fwAvg != null || clubStats.roughAvg != null) && (
+        <div className="section">
+          <div className="section-head">
+            <div className="section-title">ライ別距離</div>
+          </div>
+          <div className="cd-lie-row">
+            <div className="cd-lie-card">
+              <div className="cd-lie-label">フェアウェイ</div>
+              <div className="cd-lie-num">
+                {clubStats.fwAvg != null
+                  ? `${clubStats.fwAvg} ${unit}`
+                  : "—"}
+              </div>
+            </div>
+            <div className="cd-lie-card rough">
+              <div className="cd-lie-label">ラフ</div>
+              <div className="cd-lie-num">
+                {clubStats.roughAvg != null
+                  ? `${clubStats.roughAvg} ${unit}`
+                  : "—"}
+              </div>
+            </div>
+            {clubStats.fwAvg != null && clubStats.roughAvg != null && (
+              <div className="cd-lie-diff">
+                差 {Math.abs(clubStats.fwAvg - clubStats.roughAvg)} {unit}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 方向の傾向 */}
+      {totalDir > 0 && (
+        <div className="section">
+          <div className="section-head">
+            <div className="section-title">方向の傾向（{totalDir}回）</div>
+          </div>
+          <div className="cd-segment-bar">
+            {[
+              { key: "left", label: "左", color: "miss" },
+              { key: "straight", label: "直", color: "good" },
+              { key: "right", label: "右", color: "miss" },
+            ].map((seg) => {
+              const count = clubStats.dir[seg.key] || 0;
+              if (count === 0) return null;
+              const pct = (count / totalDir) * 100;
+              return (
+                <div
+                  key={seg.key}
+                  className={`cd-segment tone-${seg.color}`}
+                  style={{ width: `${pct}%` }}
+                  title={`${seg.label}: ${count}回 (${Math.round(pct)}%)`}
+                >
+                  {pct > 12 ? `${seg.label} ${Math.round(pct)}%` : ""}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 距離感の傾向 */}
+      {totalDepth > 0 && (
+        <div className="section">
+          <div className="section-head">
+            <div className="section-title">
+              距離感の傾向（{totalDepth}回）
+            </div>
+          </div>
+          <div className="cd-segment-bar">
+            {[
+              { key: "short", label: "短", color: "miss" },
+              { key: "pin", label: "ピン", color: "good" },
+              { key: "long", label: "長", color: "miss" },
+            ].map((seg) => {
+              const count = clubStats.depth[seg.key] || 0;
+              if (count === 0) return null;
+              const pct = (count / totalDepth) * 100;
+              return (
+                <div
+                  key={seg.key}
+                  className={`cd-segment tone-${seg.color}`}
+                  style={{ width: `${pct}%` }}
+                  title={`${seg.label}: ${count}回 (${Math.round(pct)}%)`}
+                >
+                  {pct > 12 ? `${seg.label} ${Math.round(pct)}%` : ""}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 結果分布 */}
+      <div className="section">
+        <div className="section-head">
+          <div className="section-title">結果の分布</div>
+        </div>
+        <div className="cd-outcome-list">
+          {Object.entries(outcomeCounts).map(([oc, count]) => {
+            const pct = Math.round((count / clubStats.n) * 100);
+            const tone =
+              oc === "in_play" ? "good" : oc === "ob" ? "miss" : "miss";
+            return (
+              <div key={oc} className="cd-outcome-row">
+                <div className={`cd-outcome-label tone-${tone}`}>
+                  {OUTCOME_LABELS[oc] || oc}
+                </div>
+                <div className="cd-outcome-bar">
+                  <div
+                    className={`cd-outcome-fill tone-${tone}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <div className="cd-outcome-count">
+                  {count}回 ({pct}%)
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 自己評価 */}
+      {Object.keys(ratingCounts).length > 0 && (
+        <div className="section">
+          <div className="section-head">
+            <div className="section-title">自己評価の分布</div>
+          </div>
+          <div className="cd-outcome-list">
+            {["good", "ok", "miss", "bad"].map((r) => {
+              const count = ratingCounts[r] || 0;
+              if (count === 0) return null;
+              const pct = Math.round((count / clubStats.n) * 100);
+              const tone =
+                r === "good"
+                  ? "good"
+                  : r === "ok"
+                  ? "ok"
+                  : "miss";
+              return (
+                <div key={r} className="cd-outcome-row">
+                  <div className={`cd-outcome-label tone-${tone}`}>
+                    {SELF_RATING_LABELS[r]}
+                  </div>
+                  <div className="cd-outcome-bar">
+                    <div
+                      className={`cd-outcome-fill tone-${tone}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className="cd-outcome-count">
+                    {count}回 ({pct}%)
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* v2.1: 打感の分布 */}
+      {contactN > 0 && (
+        <div className="section">
+          <div className="section-head">
+            <div className="section-title">打感の分布（{contactN}回）</div>
+          </div>
+          <div className="cd-outcome-list">
+            {["nice", "duff", "top", "shank"].map((c) => {
+              const count = contactCounts[c] || 0;
+              if (count === 0) return null;
+              const pct = Math.round((count / contactN) * 100);
+              const tone = c === "nice" ? "good" : "miss";
+              return (
+                <div key={c} className="cd-outcome-row">
+                  <div className={`cd-outcome-label tone-${tone}`}>
+                    {CONTACT_LABELS[c]}
+                  </div>
+                  <div className="cd-outcome-bar">
+                    <div
+                      className={`cd-outcome-fill tone-${tone}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className="cd-outcome-count">
+                    {count}回 ({pct}%)
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* メモ一覧 */}
+      <div className="section">
+        <div className="section-head">
+          <div className="section-title">
+            メモ {memoEntries.length > 0 && `(${memoEntries.length})`}
+          </div>
+        </div>
+        {memoEntries.length === 0 ? (
+          <div className="cd-memo-empty">
+            このクラブにはメモ付きショットがまだありません
+          </div>
+        ) : (
+          <div className="cd-memo-list">
+            {memoEntries.map((e, i) => {
+              const dist = e.shot.distance != null
+                ? `${e.shot.distance}${unit}`
+                : "—";
+              const sr = getShotSelfRating(e.shot);
+              const oc = getShotOutcome(e.shot);
+              return (
+                <div key={i} className="cd-memo-item">
+                  <div className="cd-memo-meta">
+                    <span className="cd-memo-date">
+                      {e.round.date}
+                    </span>
+                    <span className="cd-memo-loc">
+                      {e.round.venue} · {e.hole.number}H
+                    </span>
+                    <span className="cd-memo-dist">{dist}</span>
+                    {sr && (
+                      <span className={`cd-memo-rating tone-${sr === "good" ? "good" : sr === "ok" ? "ok" : "miss"}`}>
+                        {SELF_RATING_LABELS[sr]}
+                      </span>
+                    )}
+                    {e.shot.contact && (
+                      <span className={`cd-memo-rating tone-${e.shot.contact === "nice" ? "good" : "miss"}`}>
+                        {CONTACT_LABELS[e.shot.contact]}
+                      </span>
+                    )}
+                    {oc && oc !== "in_play" && (
+                      <span className="cd-memo-outcome tone-miss">
+                        {OUTCOME_LABELS[oc]}
+                      </span>
+                    )}
+                  </div>
+                  <div className="cd-memo-text">{e.shot.memo}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div style={{ height: "40px" }} />
+    </div>
+  );
+}
+
+// v2.1: ラウンド詳細画面
+function RoundDetailView({ roundId, state, setState, onBack }) {
+  const round = state.rounds.find((r) => r.id === roundId);
+  const [editingRound, setEditingRound] = useState(false);
+  const kpi = useMemo(
+    () => (round ? computeRoundKPI(round, state.clubs) : null),
+    [round, state.clubs]
+  );
+
+  // v2.1: ラウンド編集の保存処理
+  const handleUpdateRound = (updates) => {
+    if (!round || !setState) return;
+    setState((s) => ({
+      ...s,
+      rounds: s.rounds.map((r) =>
+        r.id === round.id
+          ? {
+              ...r,
+              date: updates.date,
+              venue: updates.venue,
+              frontCourse: updates.frontCourse,
+              backCourse: updates.backCourse,
+              course: updates.course,
+              tee: updates.tee,
+              weather: updates.weather,
+              // holes（ショット・スコア）はそのまま維持
+            }
+          : r
+      ),
+    }));
+    setEditingRound(false);
+  };
+
+  // このラウンドで使ったクラブ別の集計
+  const clubStatsForRound = useMemo(() => {
+    if (!round) return [];
+    const byClub = {};
+    state.clubs.forEach((c) => {
+      byClub[c.id] = { club: c, shots: [], distances: [] };
+    });
+    round.holes.forEach((h) => {
+      h.shots.forEach((s) => {
+        if (!byClub[s.clubId]) return;
+        byClub[s.clubId].shots.push(s);
+        // 通常クラブの距離（パター・ウェッジは別フィールドなので除く）
+        if (s.distance != null && !isShotOffPlay(s) && !isExcludedFromAvg(s)) {
+          byClub[s.clubId].distances.push(s.distance);
+        }
+        // ウェッジの実距離
+        if (s.wedgeDistance != null && !isExcludedFromAvg(s)) {
+          byClub[s.clubId].distances.push(s.wedgeDistance);
+        }
+      });
+    });
+    return state.clubs
+      .map((c) => {
+        const data = byClub[c.id];
+        const dists = data.distances;
+        // v2.4: ミススコア（自己評価ベース）
+        const missScore = data.shots.reduce(
+          (sum, s) => sum + getMissWeight(s),
+          0
+        );
+        return {
+          club: c,
+          n: data.shots.length,
+          avg: dists.length
+            ? Math.round(dists.reduce((a, b) => a + b, 0) / dists.length)
+            : null,
+          min: dists.length ? Math.min(...dists) : null,
+          max: dists.length ? Math.max(...dists) : null,
+          missCount: missScore, // 数値（小数あり）
+          missRate: data.shots.length
+            ? Math.round((missScore / data.shots.length) * 100)
+            : 0,
+        };
+      })
+      .filter((s) => s.n > 0);
+  }, [round, state.clubs]);
+
+  if (!round || !kpi) {
+    return (
+      <div className="screen">
+        <header className="topbar">
+          <button className="icon-btn" onClick={onBack}>
+            <ChevronLeft size={22} />
+          </button>
+          <div className="topbar-title">
+            <div className="topbar-course">ラウンド詳細</div>
+          </div>
+          <div className="icon-btn placeholder" />
+        </header>
+        <EmptyAnalytics />
+      </div>
+    );
+  }
+
+  const unit = state.unit;
+  const totalPar = round.holes.reduce((sum, h) => sum + (h.par || 0), 0);
+  const overUnder =
+    kpi.totalScore > 0 && totalPar > 0 ? kpi.totalScore - totalPar : null;
+
+  return (
+    <div className="screen">
+      <header className="topbar">
+        <button className="icon-btn" onClick={onBack}>
+          <ChevronLeft size={22} />
+        </button>
+        <button
+          type="button"
+          className="topbar-title topbar-title-tappable"
+          onClick={() => setEditingRound(true)}
+          title="タップして編集"
+        >
+          <div className="topbar-course">
+            {round.course || "—"}
+            <span className="topbar-edit-icon">✏️</span>
+          </div>
+          <div className="topbar-meta">
+            {fmtDate(round.date)} · {round.venue || ""}
+          </div>
+        </button>
+        <div className="icon-btn placeholder" />
+      </header>
+
+      {editingRound && (
+        <NewRoundSheet
+          courseMasters={state.courseMasters || []}
+          existing={round}
+          onCancel={() => setEditingRound(false)}
+          onStart={handleUpdateRound}
+        />
+      )}
+
+      {/* スコア概要 */}
+      <div className="section">
+        <div className="section-head">
+          <div className="section-title">スコア</div>
+        </div>
+        <div className="club-detail-stats">
+          <div className="cd-stat">
+            <div className="cd-stat-label">合計スコア</div>
+            <div className="cd-stat-value">
+              <span className="num-large">
+                {kpi.totalScore > 0 ? kpi.totalScore : "—"}
+              </span>
+              {overUnder != null && (
+                <span className="num-unit">
+                  {overUnder > 0 ? `+${overUnder}` : overUnder === 0 ? "±0" : overUnder}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="cd-stat">
+            <div className="cd-stat-label">パット数</div>
+            <div className="cd-stat-value">
+              <span className="num-large">{kpi.putts}</span>
+            </div>
+          </div>
+          <div className="cd-stat">
+            <div className="cd-stat-label">パーオン</div>
+            <div className="cd-stat-value small">
+              {kpi.parOn} / {kpi.parOnEligible}
+            </div>
+          </div>
+          <div className="cd-stat">
+            <div className="cd-stat-label">FWキープ</div>
+            <div className="cd-stat-value small">
+              {kpi.fwKeep} / {kpi.fwEligible}
+            </div>
+          </div>
+          <div className="cd-stat">
+            <div className="cd-stat-label">OB</div>
+            <div className={`cd-stat-value ${kpi.obs > 0 ? "miss" : ""}`}>
+              {kpi.obs}
+            </div>
+          </div>
+          <div className="cd-stat">
+            <div className="cd-stat-label">3パット以上</div>
+            <div className={`cd-stat-value ${kpi.threePuttHoles > 0 ? "miss" : ""}`}>
+              {kpi.threePuttHoles || 0}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* このラウンドで使ったクラブ別集計 */}
+      {clubStatsForRound.length > 0 && (
+        <div className="section">
+          <div className="section-head">
+            <div className="section-title">クラブ別（このラウンド）</div>
+          </div>
+          <div className="round-club-list">
+            {clubStatsForRound.map((s) => (
+              <div key={s.club.id} className="round-club-row">
+                <div className="round-club-name">{s.club.name}</div>
+                <div className="round-club-n">{s.n}回</div>
+                <div className="round-club-avg">
+                  {s.avg != null ? (
+                    <>
+                      <span className="round-club-avg-num">{s.avg}</span>
+                      <span className="round-club-avg-unit">{unit}</span>
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </div>
+                <div className="round-club-range">
+                  {s.min != null ? `${s.min}–${s.max}` : "—"}
+                </div>
+                <div className={`round-club-miss ${s.missRate > 40 ? "high" : ""}`}>
+                  {s.missCount > 0
+                    ? `ミス${s.missCount.toFixed(s.missCount % 1 === 0 ? 0 : 1)}`
+                    : "—"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ホール別 */}
+      <div className="section">
+        <div className="section-head">
+          <div className="section-title">ホール別</div>
+        </div>
+        <div className="round-hole-list">
+          {round.holes.map((h) => {
+            const score = getHoleScore(h);
+            const putts = getHolePutts(h, state.clubs);
+            const par = h.par || 0;
+            const diff = score > 0 && par > 0 ? score - par : null;
+            const tone =
+              diff == null
+                ? ""
+                : diff <= -1
+                ? "good"
+                : diff === 0
+                ? "ok"
+                : diff === 1
+                ? "ok"
+                : "miss";
+            const diffLabel =
+              diff == null
+                ? "—"
+                : diff === -2
+                ? "イーグル"
+                : diff === -1
+                ? "バーディ"
+                : diff === 0
+                ? "パー"
+                : diff === 1
+                ? "ボギー"
+                : diff === 2
+                ? "ダブル"
+                : `+${diff}`;
+            return (
+              <div key={h.number} className="round-hole-row">
+                <div className="round-hole-num">H{h.number}</div>
+                <div className="round-hole-par">Par{par || "—"}</div>
+                <div className={`round-hole-score tone-${tone}`}>
+                  {score > 0 ? score : "—"}
+                </div>
+                <div className={`round-hole-diff tone-${tone}`}>
+                  {diffLabel}
+                </div>
+                <div className="round-hole-putts">
+                  {putts > 0 ? `${putts}P` : "—"}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ height: "40px" }} />
+    </div>
   );
 }
 
@@ -4256,30 +6959,26 @@ function TendencyTab({ usedClubs, state }) {
     );
   }
 
-  const insights = [];
+  // クラブごとにメッセージを集約（同じクラブで複数の傾向を1行にまとめる）
+  const insightsByClub = new Map(); // key: club.id, value: { club, msgs: [{msg, tone}] }
+  const addInsight = (clubObj, msg, tone) => {
+    if (!insightsByClub.has(clubObj.id)) {
+      insightsByClub.set(clubObj.id, { club: clubObj, msgs: [] });
+    }
+    insightsByClub.get(clubObj.id).msgs.push({ msg, tone });
+  };
+
   dirClubs.forEach((s) => {
     const sr = (s.dir.straight / s.dir.n) * 100;
     const lr = (s.dir.left / s.dir.n) * 100;
     const rr = (s.dir.right / s.dir.n) * 100;
     if (s.dir.n >= 3) {
       if (rr >= 50)
-        insights.push({
-          club: s.club.name,
-          msg: `右に外しやすい（${Math.round(rr)}%）`,
-          tone: "warn",
-        });
+        addInsight(s.club, `右に外しやすい（${Math.round(rr)}%）`, "warn");
       else if (lr >= 50)
-        insights.push({
-          club: s.club.name,
-          msg: `左に外しやすい（${Math.round(lr)}%）`,
-          tone: "warn",
-        });
+        addInsight(s.club, `左に外しやすい（${Math.round(lr)}%）`, "warn");
       else if (sr >= 60)
-        insights.push({
-          club: s.club.name,
-          msg: `安定 ストレート率${Math.round(sr)}%`,
-          tone: "good",
-        });
+        addInsight(s.club, `安定 ストレート率${Math.round(sr)}%`, "good");
     }
   });
   depthClubs.forEach((s) => {
@@ -4287,18 +6986,21 @@ function TendencyTab({ usedClubs, state }) {
     const ov = (s.depth.over / s.depth.n) * 100;
     if (s.depth.n >= 3) {
       if (sh >= 50)
-        insights.push({
-          club: s.club.name,
-          msg: `ショートしがち（${Math.round(sh)}%）`,
-          tone: "warn",
-        });
+        addInsight(s.club, `ショートしがち（${Math.round(sh)}%）`, "warn");
       else if (ov >= 50)
-        insights.push({
-          club: s.club.name,
-          msg: `オーバーしがち（${Math.round(ov)}%）`,
-          tone: "warn",
-        });
+        addInsight(s.club, `オーバーしがち（${Math.round(ov)}%）`, "warn");
     }
+  });
+
+  // クラブごとに1エントリにまとめる
+  // 全部 good なら good、警告が混ざってたら warn
+  const insights = Array.from(insightsByClub.values()).map((entry) => {
+    const hasWarn = entry.msgs.some((m) => m.tone === "warn");
+    return {
+      club: entry.club.name,
+      msgs: entry.msgs.map((m) => m.msg),
+      tone: hasWarn ? "warn" : "good",
+    };
   });
 
   return (
@@ -4319,7 +7021,7 @@ function TendencyTab({ usedClubs, state }) {
             {insights.map((it, i) => (
               <div key={i} className={`insight tone-${it.tone}`}>
                 <span className="insight-club">{it.club}</span>
-                <span className="insight-msg">{it.msg}</span>
+                <span className="insight-msg">{it.msgs.join(" / ")}</span>
               </div>
             ))}
           </div>
@@ -4421,7 +7123,7 @@ function TendencyTab({ usedClubs, state }) {
   );
 }
 
-function RoundsTab({ state }) {
+function RoundsTab({ state, onRoundClick }) {
   const rounds = useMemo(
     () =>
       state.rounds
@@ -4484,10 +7186,16 @@ function RoundsTab({ state }) {
         </div>
         <div className="round-kpi-list">
           {rounds.map((r) => (
-            <div key={r.id} className="round-kpi-card">
+            <button
+              key={r.id}
+              type="button"
+              className="round-kpi-card"
+              onClick={() => onRoundClick && onRoundClick(r.id)}
+            >
               <div className="round-kpi-head">
                 <div className="round-kpi-date">{fmtDate(r.date)}</div>
                 <div className="round-kpi-course">{r.course || "—"}</div>
+                <div className="round-kpi-arrow">›</div>
               </div>
               <div className="round-kpi-grid">
                 <div className="rkpi">
@@ -4526,7 +7234,7 @@ function RoundsTab({ state }) {
                   </div>
                 </div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
@@ -4575,7 +7283,7 @@ function ClubsView({ state, setState, onBack }) {
     if (!name.trim()) return;
     setState((s) => ({
       ...s,
-      clubs: [
+      clubs: sortClubs([
         ...s.clubs,
         {
           id: uid(),
@@ -4583,7 +7291,7 @@ function ClubsView({ state, setState, onBack }) {
           category,
           avgDistance: avgDistance != null ? Number(avgDistance) : null,
         },
-      ],
+      ]),
     }));
     setShowAdd(false);
   };
@@ -4945,12 +7653,12 @@ function Tutorial({ onClose }) {
             を分けて記録できるので、「ナイスショットなのにOB」も残せます。
           </p>
           <p>
-            OB後の打ち直しは<b>「打ち直し」チェック</b>を入れると、
-            距離分析から自動的に除外されます。
+            想定外のミスは<b>「平均距離から除外」チェック</b>を入れると、
+            平均距離からは外しつつミス率にカウントできます。
           </p>
           <p>
             ホール下部の<b>スコア入力</b>でそのホールの打数を手入力。
-            ペナや打ち直しを含めた正確なスコアを残せます。
+            ペナを含めた正確なスコアを残せます。
           </p>
         </>
       ),
@@ -5303,6 +8011,22 @@ function Style() {
         border-bottom: 1px solid var(--border-soft);
       }
       .topbar-title { flex: 1; text-align: center; min-width: 0; padding: 0 8px; }
+      /* v2.1: タップ可能なヘッダー（ラウンド編集用） */
+      button.topbar-title-tappable {
+        background: none;
+        border: none;
+        font: inherit;
+        color: inherit;
+        cursor: pointer;
+      }
+      button.topbar-title-tappable:active {
+        opacity: 0.6;
+      }
+      .topbar-edit-icon {
+        margin-left: 6px;
+        font-size: 11px;
+        opacity: 0.5;
+      }
       .topbar-course { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .topbar-meta { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
       .icon-btn {
@@ -5729,6 +8453,56 @@ function Style() {
         grid-template-columns: repeat(2, 1fr);
         gap: 6px;
       }
+      /* v2.1: ウェッジ結果のグループ表示 */
+      .wedge-result-groups {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .wedge-result-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .wedge-result-group-label {
+        font-size: 10px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 600;
+        padding-left: 2px;
+      }
+      .wedge-result-group-chips {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+      }
+      /* v2.1: ショット行の複数結果表示 */
+      .shot-result-multi {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        align-items: flex-end;
+      }
+      .shot-result-mini {
+        font-size: 9px;
+        font-weight: 700;
+        padding: 1px 5px;
+        border-radius: 3px;
+        white-space: nowrap;
+      }
+      .shot-result-mini.tone-good {
+        background: rgba(182, 242, 74, 0.18);
+        color: var(--green);
+      }
+      .shot-result-mini.tone-ok {
+        background: rgba(94, 184, 255, 0.18);
+        color: var(--tone-ok, #5eb8ff);
+      }
+      .shot-result-mini.tone-miss {
+        background: rgba(255, 184, 77, 0.18);
+        color: var(--amber, #ffb84d);
+      }
       .putt-result-chip {
         text-align: center;
         padding: 12px 8px;
@@ -5786,6 +8560,204 @@ function Style() {
         font-size: 11px;
         color: var(--text-dim);
         line-height: 1.6;
+      }
+
+      /* v2.1: ウェッジ分析タブ */
+      .wedge-cards {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 12px 16px;
+      }
+      .wedge-card {
+        background: var(--bg-1);
+        border: 1px solid var(--border-soft);
+        border-radius: 12px;
+        padding: 14px;
+      }
+      .wedge-card-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 12px;
+      }
+      .wedge-card-club {
+        font-size: 18px;
+        font-weight: 700;
+      }
+      .wedge-card-n {
+        font-size: 12px;
+        color: var(--text-faint);
+      }
+      .wedge-card-stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+      .wedge-stat {
+        background: var(--bg-2);
+        border-radius: 8px;
+        padding: 8px 10px;
+      }
+      .wedge-stat-label {
+        font-size: 10px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 2px;
+      }
+      .wedge-stat-value {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--text);
+      }
+      .wedge-stat-value.good {
+        color: var(--green);
+      }
+      .wedge-stat-value.miss {
+        color: var(--red);
+      }
+      .wedge-result-bar {
+        display: flex;
+        height: 24px;
+        border-radius: 6px;
+        overflow: hidden;
+        background: var(--bg-2);
+      }
+      .wedge-result-segment {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+        font-weight: 700;
+        color: #0a0a0a;
+        white-space: nowrap;
+      }
+      .wedge-result-segment.tone-good {
+        background: var(--green);
+      }
+      .wedge-result-segment.tone-ok {
+        background: var(--tone-ok, #5eb8ff);
+      }
+      .wedge-result-segment.tone-miss {
+        background: var(--amber, #ffb84d);
+      }
+
+      /* v2.1: パター分析タブ */
+      .putter-bucket-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 0 16px;
+      }
+      .putter-bucket-row {
+        display: grid;
+        grid-template-columns: 70px 50px 1fr;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        background: var(--bg-1);
+        border: 1px solid var(--border-soft);
+        border-radius: 8px;
+      }
+      .putter-bucket-label {
+        font-weight: 700;
+        font-size: 13px;
+      }
+      .putter-bucket-n {
+        font-size: 11px;
+        color: var(--text-faint);
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .putter-bucket-bars {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .putter-bucket-bar-track {
+        height: 8px;
+        background: var(--bg-2);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .putter-bucket-bar-fill {
+        height: 100%;
+        background: var(--green);
+        transition: width 0.3s ease;
+      }
+      .putter-bucket-rate {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px;
+        color: var(--text-dim);
+      }
+      .putter-bucket-empty {
+        font-size: 11px;
+        color: var(--text-faint);
+      }
+      /* v2.1: 距離精度のサブテキスト（クセラベル） */
+      .wedge-stat-sub {
+        font-size: 9px;
+        margin-left: 6px;
+        font-weight: 600;
+        color: var(--text-faint);
+      }
+      /* v2.1: ウェッジ実距離横の差分バッジ */
+      .wedge-diff-badge {
+        margin-left: 10px;
+        padding: 3px 7px;
+        border-radius: 5px;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .wedge-diff-badge.perfect {
+        background: rgba(182, 242, 74, 0.2);
+        color: var(--green);
+      }
+      .wedge-diff-badge.long {
+        background: rgba(255, 184, 77, 0.2);
+        color: var(--amber, #ffb84d);
+      }
+      .wedge-diff-badge.short {
+        background: rgba(94, 184, 255, 0.2);
+        color: var(--tone-ok, #5eb8ff);
+      }
+      /* v2.1: ウェッジ距離 ±調整ボタン */
+      .wedge-adjust-row {
+        display: flex;
+        gap: 6px;
+        margin-top: 8px;
+      }
+      .wedge-adjust-btn {
+        flex: 1;
+        padding: 12px 0;
+        background: var(--bg-2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        font-size: 16px;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .wedge-adjust-btn:active {
+        transform: scale(0.95);
+      }
+      .wedge-adjust-btn.minus {
+        background: rgba(94, 184, 255, 0.28);
+        border-color: rgba(94, 184, 255, 0.75);
+        color: #8fc8ff;
+      }
+      .wedge-adjust-btn.minus:active {
+        background: rgba(94, 184, 255, 0.45);
+      }
+      .wedge-adjust-btn.plus {
+        background: rgba(255, 184, 77, 0.28);
+        border-color: rgba(255, 184, 77, 0.75);
+        color: #ffd182;
+      }
+      .wedge-adjust-btn.plus:active {
+        background: rgba(255, 184, 77, 0.45);
       }
 
       /* SHEET ACTIONS */
@@ -5948,15 +8920,17 @@ function Style() {
       }
       .shot-row {
         display: grid;
-        grid-template-columns: 28px 50px 70px 1fr 56px 36px;
+        grid-template-columns: 24px 42px 60px 1fr 44px 36px;
         align-items: center;
-        gap: 8px;
-        padding: 10px 12px;
+        gap: 6px;
+        padding: 10px 10px;
         background: var(--bg-1);
         border-radius: 10px;
         border: 1px solid var(--border-soft);
         text-align: left;
         width: 100%;
+        min-width: 0;
+        overflow: hidden;
       }
       .shot-num {
         font-family: 'JetBrains Mono', monospace;
@@ -5964,6 +8938,9 @@ function Style() {
       }
       .shot-club {
         font-weight: 700; font-size: 13px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .shot-distance .dist-num {
         font-family: 'JetBrains Mono', monospace;
@@ -5974,7 +8951,17 @@ function Style() {
       }
       .shot-distance .dist-empty { color: var(--text-faint); font-size: 13px; }
       .shot-tendency-tags {
-        display: flex; gap: 4px; flex-wrap: wrap;
+        display: flex;
+        gap: 3px;
+        flex-direction: column;
+        align-items: flex-start;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .shot-tendency-tags .tag {
+        font-size: 10px;
+        white-space: nowrap;
+        max-width: 100%;
       }
       .tag {
         font-size: 9px;
@@ -5985,6 +8972,11 @@ function Style() {
       }
       .tag-dir { background: rgba(94,184,255,0.15); color: var(--blue); }
       .tag-depth { background: rgba(255,184,77,0.15); color: var(--amber); }
+      .tag-contact {
+        background: rgba(255, 107, 107, 0.18);
+        color: var(--red);
+        font-weight: 700;
+      }
       .shot-lie {
         font-size: 10px; color: var(--text-dim);
         text-align: right;
@@ -6044,7 +9036,7 @@ function Style() {
         -webkit-backdrop-filter: blur(12px);
         backdrop-filter: blur(12px);
         border-top: 1px solid var(--border-soft);
-        padding: 10px 14px;
+        padding: 10px 8px;
         z-index: 7;
       }
       @media (min-width: 600px) {
@@ -6053,31 +9045,31 @@ function Style() {
       .score-input-bar-row {
         display: flex;
         align-items: center;
-        gap: 7px;
+        gap: 4px;
         flex-wrap: nowrap;
         justify-content: center;
       }
       .score-input-bar-label {
-        font-size: 16px;
+        font-size: 14px;
         color: var(--text-faint);
         font-weight: 700;
         letter-spacing: 0;
-        min-width: 14px;
+        min-width: 12px;
         text-align: center;
       }
       .score-input-bar-divider {
         width: 1px;
         height: 24px;
         background: var(--border-soft);
-        margin: 0 4px;
+        margin: 0 2px;
       }
       .score-diff {
         font-family: 'JetBrains Mono', monospace;
-        font-size: 13px;
+        font-size: 11px;
         font-weight: 700;
-        padding: 3px 7px;
-        border-radius: 5px;
-        margin-left: 2px;
+        padding: 2px 5px;
+        border-radius: 4px;
+        margin-left: 0;
       }
       .score-diff.tone-great {
         background: var(--green);
@@ -6102,7 +9094,7 @@ function Style() {
       .score-step-btn {
         flex: 0 0 auto;
         background: var(--bg-2);
-        border-radius: 8px;
+        border-radius: 7px;
         font-weight: 700;
         color: var(--text);
       }
@@ -6113,25 +9105,26 @@ function Style() {
         opacity: 0.3;
       }
       .score-step-btn.small {
-        width: 36px;
+        width: 30px;
         height: 36px;
-        font-size: 19px;
+        font-size: 17px;
+        padding: 0;
       }
       .score-input-num {
         flex: 0 0 auto;
         text-align: center;
         background: var(--bg-2);
         border: 1px solid var(--border);
-        border-radius: 8px;
+        border-radius: 7px;
         color: var(--text);
         font-family: 'JetBrains Mono', monospace;
         font-weight: 700;
         outline: none;
       }
       .score-input-num.small {
-        width: 53px;
+        width: 42px;
         height: 36px;
-        font-size: 18px;
+        font-size: 17px;
         padding: 0;
       }
       .score-input-num:focus {
@@ -6222,18 +9215,31 @@ function Style() {
         border-radius: 12px;
         border: 1px solid var(--border-soft);
       }
+      /* v3: 2ボタングループ */
+      .voice-btn-group {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .voice-input-btn.chat {
+        background: rgba(94, 184, 255, 0.12);
+        border-color: rgba(94, 184, 255, 0.3);
+      }
+      .voice-input-btn.chat:active {
+        background: rgba(94, 184, 255, 0.2);
+      }
       .voice-input-btn {
         width: 100%;
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 8px;
-        padding: 12px 16px;
+        gap: 6px;
+        padding: 11px 12px;
         background: var(--bg-1);
         border: 1px solid var(--border);
         border-radius: 10px;
         color: var(--text);
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.2s;
@@ -6305,6 +9311,122 @@ function Style() {
       }
       .voice-help-toggle:active {
         background: var(--bg-1);
+      }
+
+      /* v3: 対話音声 - チャット式UI */
+      .chat-sheet {
+        max-height: 88vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .chat-stream {
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-height: 240px;
+        max-height: calc(88vh - 280px);
+      }
+      .chat-bubble {
+        max-width: 80%;
+        padding: 10px 14px;
+        border-radius: 14px;
+        word-break: break-word;
+      }
+      .chat-bubble-text {
+        font-size: 13px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+      }
+      .chat-bubble.chat-ai {
+        align-self: flex-start;
+        background: var(--bg-2);
+        border-bottom-left-radius: 4px;
+        color: var(--text);
+      }
+      .chat-bubble.chat-user {
+        align-self: flex-end;
+        background: rgba(182, 242, 74, 0.18);
+        border-bottom-right-radius: 4px;
+        color: var(--text);
+      }
+      .chat-bubble.listening {
+        background: rgba(255, 107, 107, 0.18);
+        color: var(--red);
+        font-weight: 700;
+        animation: pulse-listen 1.2s ease-in-out infinite;
+      }
+      @keyframes pulse-listen {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+      .chat-status {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        padding: 8px 0;
+        border-top: 1px solid var(--border-soft);
+        border-bottom: 1px solid var(--border-soft);
+        margin: 8px 0;
+        min-height: 32px;
+      }
+      .chat-chip {
+        background: var(--bg-2);
+        color: var(--green);
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .chat-actions {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 8px;
+        padding-top: 8px;
+      }
+      .chat-record-btn {
+        padding: 14px;
+        background: var(--green);
+        color: #0a0a0a;
+        border: none;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .chat-record-btn.listening {
+        background: var(--red);
+        color: #fff;
+        animation: pulse-listen 1.2s ease-in-out infinite;
+      }
+      .chat-record-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .chat-skip-btn,
+      .chat-save-btn {
+        padding: 14px 12px;
+        background: var(--bg-2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .chat-save-btn:not(:disabled) {
+        background: rgba(182, 242, 74, 0.2);
+        border-color: var(--green);
+        color: var(--green);
+      }
+      .chat-save-btn:disabled,
+      .chat-skip-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
       }
       .voice-help-list {
         margin-top: 10px;
@@ -6452,6 +9574,39 @@ function Style() {
       .result-btn.on.tone-miss { background: var(--tone-miss); color: #0a0a0a; }
       .result-btn.on.tone-bad { background: var(--tone-bad); color: #fff; }
 
+      /* v2.1: 打感（contact）チップ */
+      .contact-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+      }
+      .contact-chip {
+        padding: 12px 0;
+        background: var(--bg-2);
+        border: 1px solid var(--border-soft);
+        border-radius: 10px;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text-dim);
+        text-align: center;
+      }
+      .contact-chip:active { transform: scale(0.95); }
+      .contact-chip.on.tone-good {
+        background: var(--green);
+        color: #0a0a0a;
+        border-color: var(--green);
+      }
+      .contact-chip.on.tone-ok {
+        background: var(--tone-ok, #5eb8ff);
+        color: #0a0a0a;
+        border-color: var(--tone-ok, #5eb8ff);
+      }
+      .contact-chip.on.tone-miss {
+        background: var(--amber, #ffb84d);
+        color: #0a0a0a;
+        border-color: var(--amber, #ffb84d);
+      }
+
       /* v2.0: 結果（事実）ボタン */
       .outcome-row {
         display: grid;
@@ -6595,6 +9750,286 @@ function Style() {
       .distance-chart {
         padding: 12px 16px 0;
         display: flex; flex-direction: column; gap: 8px;
+      }
+
+      /* v2.1: ShotTab - クラブリスト */
+      .club-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px 16px 0;
+      }
+      .club-list-item {
+        position: relative;
+        display: block;
+        text-align: left;
+        background: var(--bg-1);
+        border: 1px solid var(--border-soft);
+        border-radius: 12px;
+        padding: 14px;
+        width: 100%;
+        cursor: pointer;
+      }
+      .club-list-item:active {
+        background: var(--bg-2);
+      }
+      .club-list-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 10px;
+      }
+      .club-list-name {
+        font-size: 18px;
+        font-weight: 700;
+      }
+      .club-list-n {
+        font-size: 11px;
+        color: var(--text-faint);
+      }
+      .club-list-stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .club-list-stat {
+        background: var(--bg-2);
+        border-radius: 6px;
+        padding: 6px 8px;
+      }
+      .club-list-stat-label {
+        font-size: 9px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 2px;
+      }
+      .club-list-stat-value {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .club-list-stat-value.small {
+        font-size: 12px;
+      }
+      .club-list-stat-value .num-large {
+        font-size: 16px;
+      }
+      .club-list-stat-value .num-unit {
+        font-size: 10px;
+        color: var(--text-faint);
+        margin-left: 2px;
+      }
+      .club-list-stat-value.miss {
+        color: var(--red);
+      }
+      .club-list-bar {
+        height: 4px;
+        background: var(--bg-2);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      .club-list-bar-fill {
+        height: 100%;
+        background: var(--green);
+      }
+      .club-list-arrow {
+        position: absolute;
+        right: 14px;
+        top: 14px;
+        font-size: 24px;
+        color: var(--text-faint);
+        line-height: 1;
+      }
+
+      /* v2.1: ClubDetailView */
+      .club-detail-stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        padding: 0 16px;
+      }
+      .cd-stat {
+        background: var(--bg-1);
+        border: 1px solid var(--border-soft);
+        border-radius: 10px;
+        padding: 12px;
+      }
+      .cd-stat-label {
+        font-size: 10px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+      }
+      .cd-stat-value {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 18px;
+        font-weight: 700;
+      }
+      .cd-stat-value.small {
+        font-size: 14px;
+      }
+      .cd-stat-value.miss {
+        color: var(--red);
+      }
+      .cd-stat-value .num-large {
+        font-size: 22px;
+      }
+      .cd-stat-value .num-unit {
+        font-size: 11px;
+        color: var(--text-faint);
+        margin-left: 3px;
+      }
+      .cd-lie-row {
+        display: flex;
+        gap: 10px;
+        padding: 0 16px;
+        align-items: center;
+      }
+      .cd-lie-card {
+        flex: 1;
+        background: var(--bg-1);
+        border: 1px solid var(--border-soft);
+        border-radius: 10px;
+        padding: 12px;
+      }
+      .cd-lie-card.rough {
+        background: rgba(255, 184, 77, 0.08);
+        border-color: rgba(255, 184, 77, 0.25);
+      }
+      .cd-lie-label {
+        font-size: 10px;
+        color: var(--text-faint);
+        margin-bottom: 4px;
+      }
+      .cd-lie-num {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .cd-lie-diff {
+        font-size: 11px;
+        color: var(--text-dim);
+        white-space: nowrap;
+      }
+      .cd-segment-bar {
+        display: flex;
+        height: 28px;
+        margin: 0 16px;
+        border-radius: 6px;
+        overflow: hidden;
+        background: var(--bg-2);
+      }
+      .cd-segment {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 700;
+        color: #0a0a0a;
+        white-space: nowrap;
+      }
+      .cd-segment.tone-good { background: var(--green); }
+      .cd-segment.tone-ok { background: var(--tone-ok, #5eb8ff); }
+      .cd-segment.tone-miss { background: var(--amber, #ffb84d); }
+      .cd-outcome-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 0 16px;
+      }
+      .cd-outcome-row {
+        display: grid;
+        grid-template-columns: 70px 1fr 80px;
+        align-items: center;
+        gap: 8px;
+      }
+      .cd-outcome-label {
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .cd-outcome-label.tone-good { color: var(--green); }
+      .cd-outcome-label.tone-ok { color: var(--tone-ok, #5eb8ff); }
+      .cd-outcome-label.tone-miss { color: var(--amber, #ffb84d); }
+      .cd-outcome-bar {
+        height: 12px;
+        background: var(--bg-2);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      .cd-outcome-fill {
+        height: 100%;
+      }
+      .cd-outcome-fill.tone-good { background: var(--green); }
+      .cd-outcome-fill.tone-ok { background: var(--tone-ok, #5eb8ff); }
+      .cd-outcome-fill.tone-miss { background: var(--amber, #ffb84d); }
+      .cd-outcome-count {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        color: var(--text-dim);
+        text-align: right;
+      }
+      .cd-memo-empty {
+        text-align: center;
+        color: var(--text-faint);
+        font-size: 12px;
+        padding: 20px 16px;
+      }
+      .cd-memo-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 0 16px;
+      }
+      .cd-memo-item {
+        background: var(--bg-1);
+        border: 1px solid var(--border-soft);
+        border-radius: 10px;
+        padding: 12px;
+      }
+      .cd-memo-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 6px;
+        align-items: center;
+      }
+      .cd-memo-date {
+        font-size: 11px;
+        color: var(--text-dim);
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .cd-memo-loc {
+        font-size: 11px;
+        color: var(--text-faint);
+      }
+      .cd-memo-dist {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text);
+        background: var(--bg-2);
+        padding: 1px 6px;
+        border-radius: 4px;
+      }
+      .cd-memo-rating, .cd-memo-outcome {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 1px 6px;
+        border-radius: 4px;
+      }
+      .cd-memo-rating.tone-good { background: rgba(182,242,74,0.2); color: var(--green); }
+      .cd-memo-rating.tone-ok { background: rgba(94,184,255,0.2); color: var(--tone-ok, #5eb8ff); }
+      .cd-memo-rating.tone-miss { background: rgba(255,184,77,0.2); color: var(--amber, #ffb84d); }
+      .cd-memo-outcome.tone-miss { background: rgba(255,107,107,0.2); color: var(--red); }
+      .cd-memo-text {
+        font-size: 14px;
+        color: var(--text);
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
       }
       .dchart-row {
         display: grid;
@@ -6796,6 +10231,120 @@ function Style() {
       .round-kpi-card {
         background: var(--bg-1); border-radius: 12px;
         padding: 12px;
+        width: 100%;
+        text-align: left;
+        cursor: pointer;
+        border: 1px solid var(--border-soft);
+      }
+      .round-kpi-card:active {
+        background: var(--bg-2);
+      }
+      .round-kpi-arrow {
+        font-size: 22px;
+        color: var(--text-faint);
+        line-height: 1;
+        margin-left: auto;
+        padding-left: 8px;
+      }
+      /* v2.1: ラウンド詳細画面 */
+      .round-club-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 0 16px;
+      }
+      .round-club-row {
+        display: grid;
+        grid-template-columns: 50px 36px 1fr 60px 50px;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: var(--bg-1);
+        border: 1px solid var(--border-soft);
+        border-radius: 8px;
+      }
+      .round-club-name {
+        font-weight: 700;
+        font-size: 14px;
+      }
+      .round-club-n {
+        font-size: 11px;
+        color: var(--text-faint);
+        text-align: right;
+      }
+      .round-club-avg {
+        font-family: 'JetBrains Mono', monospace;
+        text-align: right;
+      }
+      .round-club-avg-num {
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .round-club-avg-unit {
+        font-size: 9px;
+        color: var(--text-faint);
+        margin-left: 2px;
+      }
+      .round-club-range {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        color: var(--text-dim);
+        text-align: right;
+      }
+      .round-club-miss {
+        font-size: 11px;
+        color: var(--text-dim);
+        text-align: right;
+      }
+      .round-club-miss.high {
+        color: var(--red);
+        font-weight: 700;
+      }
+      .round-hole-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 0 16px;
+      }
+      .round-hole-row {
+        display: grid;
+        grid-template-columns: 40px 50px 40px 1fr 40px;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: var(--bg-1);
+        border: 1px solid var(--border-soft);
+        border-radius: 6px;
+      }
+      .round-hole-num {
+        font-weight: 700;
+        font-size: 13px;
+      }
+      .round-hole-par {
+        font-size: 11px;
+        color: var(--text-faint);
+      }
+      .round-hole-score {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 16px;
+        font-weight: 700;
+        text-align: center;
+      }
+      .round-hole-score.tone-good { color: var(--green); }
+      .round-hole-score.tone-ok { color: var(--text); }
+      .round-hole-score.tone-miss { color: var(--amber); }
+      .round-hole-diff {
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .round-hole-diff.tone-good { color: var(--green); }
+      .round-hole-diff.tone-ok { color: var(--text-dim); }
+      .round-hole-diff.tone-miss { color: var(--amber); }
+      .round-hole-putts {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        color: var(--text-faint);
+        text-align: right;
       }
       .round-kpi-head {
         display: flex; justify-content: space-between; align-items: baseline;
