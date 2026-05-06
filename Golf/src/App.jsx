@@ -3923,17 +3923,17 @@ function ChatChoiceButtons({
 
   // 距離（通常クラブ）
   if (askingKey === "distance") {
-    return renderDistanceChoices([50, 80, 100, 120, 140, 150, 170, 200, 230]);
+    return renderDistanceChoices([80, 100, 120, 140, 170, 200]);
   }
 
   // ピンまで距離
   if (askingKey === "wedgeTargetDistance") {
-    return renderDistanceChoices([20, 30, 40, 50, 60, 70, 80, 100]);
+    return renderDistanceChoices([20, 30, 50, 70, 90, 110]);
   }
 
   // 実距離
   if (askingKey === "wedgeDistance") {
-    return renderDistanceChoices([20, 30, 40, 50, 60, 70, 80, 100]);
+    return renderDistanceChoices([20, 30, 50, 70, 90, 110]);
   }
 
   // ライ
@@ -4278,6 +4278,34 @@ function ShotEditor({
   const lastTranscriptRef = useRef(""); // 直前に処理した認識結果
   const lastQuestionRef = useRef(""); // 直前のAI質問（連投防止）
   const isProcessingResultRef = useRef(false); // onresult処理中フラグ
+
+  // v3.2: ShotEditor アンマウント時に音声認識を確実に停止（マイクリーク対策）
+  useEffect(() => {
+    return () => {
+      // クイック音声
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.onstart = null;
+          recognitionRef.current.onerror = null;
+          recognitionRef.current.onend = null;
+          recognitionRef.current.onresult = null;
+          recognitionRef.current.abort();
+        } catch {}
+        recognitionRef.current = null;
+      }
+      // 対話音声
+      if (chatRecognitionRef.current) {
+        try {
+          chatRecognitionRef.current.onstart = null;
+          chatRecognitionRef.current.onerror = null;
+          chatRecognitionRef.current.onend = null;
+          chatRecognitionRef.current.onresult = null;
+          chatRecognitionRef.current.abort();
+        } catch {}
+        chatRecognitionRef.current = null;
+      }
+    };
+  }, []);
 
   // 音声認識API対応チェック
   const speechSupported = useMemo(() => {
@@ -4772,10 +4800,16 @@ function ShotEditor({
 
   // v3: 対話モード終了
   const exitChatVoice = () => {
+    // v3.2: 完全クリーンアップ（マイクリーク対策）
     if (chatRecognitionRef.current) {
       try {
+        chatRecognitionRef.current.onstart = null;
+        chatRecognitionRef.current.onerror = null;
+        chatRecognitionRef.current.onend = null;
+        chatRecognitionRef.current.onresult = null;
         chatRecognitionRef.current.abort();
       } catch {}
+      chatRecognitionRef.current = null;
     }
     // v3.1: refs リセット
     lastTranscriptRef.current = "";
@@ -4784,11 +4818,25 @@ function ShotEditor({
     setChatVoiceMode(false);
     setChatMessages([]);
     setChatVoiceState("idle");
+    setCurrentAskingKey(null);
+    setChatNumericInput("");
+    setChatMultiSelect([]);
   };
 
   // v3: 対話モードでの音声録音
   const startChatRecognition = () => {
     if (!speechSupported) return;
+    // v3.2: 前回の recognition が残っていたら確実に停止（マイクリーク対策）
+    if (chatRecognitionRef.current) {
+      try {
+        chatRecognitionRef.current.onstart = null;
+        chatRecognitionRef.current.onerror = null;
+        chatRecognitionRef.current.onend = null;
+        chatRecognitionRef.current.onresult = null;
+        chatRecognitionRef.current.abort();
+      } catch {}
+      chatRecognitionRef.current = null;
+    }
     // 録音開始時、直前のtranscriptと処理中フラグをリセット
     lastTranscriptRef.current = "";
     isProcessingResultRef.current = false;
@@ -5075,6 +5123,17 @@ function ShotEditor({
       setVoiceState("error");
       setTimeout(() => setVoiceState("idle"), 3000);
       return;
+    }
+    // v3.2: 前回の recognition が残っていたら確実に停止（マイクリーク対策）
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.onstart = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.onend = null;
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.abort();
+      } catch {}
+      recognitionRef.current = null;
     }
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -10120,26 +10179,29 @@ function Style() {
 
       /* v3.2: 選択肢ボタン群（チャット内・右寄せ） */
       .chat-choices {
-        align-self: flex-end;
-        max-width: 88%;
+        align-self: stretch;
+        width: 100%;
+        max-width: 100%;
         background: rgba(94, 184, 255, 0.06);
         border: 1px solid rgba(94, 184, 255, 0.2);
         border-radius: 12px;
-        padding: 10px;
+        padding: 12px;
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 10px;
       }
       .chat-choices-grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 6px;
+        gap: 8px;
       }
       .chat-choices-grid.clubs {
         grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
       }
       .chat-choices-grid.distance {
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
       }
       .chat-choices-grid.two-cols {
         grid-template-columns: repeat(2, 1fr);
@@ -10148,16 +10210,25 @@ function Style() {
         grid-template-columns: repeat(3, 1fr);
       }
       .chat-choice-btn {
-        padding: 10px 6px;
+        min-height: 52px;
+        padding: 14px 8px;
         background: var(--bg-2);
         border: 1px solid var(--border);
-        border-radius: 8px;
+        border-radius: 10px;
         color: var(--text);
-        font-size: 12px;
-        font-weight: 600;
+        font-size: 15px;
+        font-weight: 700;
         cursor: pointer;
         transition: all 0.15s;
         text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      /* クラブのみ字を少し小さく（4列） */
+      .chat-choices-grid.clubs .chat-choice-btn {
+        font-size: 14px;
+        min-height: 48px;
       }
       .chat-choice-btn:active {
         transform: scale(0.95);
@@ -10184,18 +10255,19 @@ function Style() {
       }
       .chat-choices-numeric {
         display: flex;
-        gap: 6px;
+        gap: 8px;
         align-items: center;
       }
       .chat-numeric-input {
         flex: 1;
-        padding: 10px 8px;
+        min-height: 48px;
+        padding: 12px 10px;
         background: var(--bg-2);
         border: 1px solid var(--border);
-        border-radius: 8px;
+        border-radius: 10px;
         color: var(--text);
         font-family: 'JetBrains Mono', monospace;
-        font-size: 14px;
+        font-size: 16px;
         font-weight: 700;
         text-align: center;
         outline: none;
@@ -10204,12 +10276,13 @@ function Style() {
         border-color: var(--green);
       }
       .chat-numeric-confirm {
-        padding: 10px 16px;
+        min-height: 48px;
+        padding: 12px 20px;
         background: var(--green);
         color: #0a0a0a;
         border: none;
-        border-radius: 8px;
-        font-size: 13px;
+        border-radius: 10px;
+        font-size: 15px;
         font-weight: 700;
         cursor: pointer;
       }
@@ -10219,35 +10292,42 @@ function Style() {
       }
       .chat-skip-inline {
         align-self: stretch;
-        padding: 6px 10px;
-        background: transparent;
-        border: 1px dashed var(--border-soft);
-        border-radius: 6px;
-        color: var(--text-faint);
-        font-size: 11px;
+        min-height: 44px;
+        padding: 12px 14px;
+        background: var(--bg-1);
+        border: 1px dashed var(--border);
+        border-radius: 10px;
+        color: var(--text-dim);
+        font-size: 13px;
+        font-weight: 600;
         cursor: pointer;
       }
       .chat-skip-inline:active {
-        background: var(--bg-1);
+        background: var(--bg-2);
+        transform: scale(0.97);
       }
       .chat-multi-actions {
         display: flex;
-        gap: 6px;
-        align-items: center;
+        gap: 8px;
+        align-items: stretch;
       }
       .chat-multi-actions .chat-skip-inline {
         flex: 1;
       }
       .chat-confirm-inline {
         flex: 1;
-        padding: 8px 12px;
+        min-height: 44px;
+        padding: 12px 16px;
         background: var(--green);
         color: #0a0a0a;
         border: none;
-        border-radius: 8px;
-        font-size: 12px;
+        border-radius: 10px;
+        font-size: 14px;
         font-weight: 700;
         cursor: pointer;
+      }
+      .chat-confirm-inline:active {
+        transform: scale(0.97);
       }
       .chat-confirm-inline:disabled {
         opacity: 0.4;
