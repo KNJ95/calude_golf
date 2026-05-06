@@ -3943,6 +3943,10 @@ function ShotEditor({
   const [chatMessages, setChatMessages] = useState([]); // {role: 'ai'|'user', text: string, timestamp: number}[]
   const [chatVoiceState, setChatVoiceState] = useState("idle"); // idle|listening|processing
   const chatRecognitionRef = useRef(null);
+  // v3.1: 重複認識・連投防止用 ref
+  const lastTranscriptRef = useRef(""); // 直前に処理した認識結果
+  const lastQuestionRef = useRef(""); // 直前のAI質問（連投防止）
+  const isProcessingResultRef = useRef(false); // onresult処理中フラグ
 
   // 音声認識API対応チェック
   const speechSupported = useMemo(() => {
@@ -4273,60 +4277,76 @@ function ShotEditor({
   };
 
   // v3: 対話音声 - 必要項目の判定
+  // v3.1: overrideValues を受け取れるように（state更新直後の値を直接渡せる）
   // 通常クラブ・ウェッジ別に不足項目を返す
-  const getMissingFields = () => {
+  const getMissingFields = (overrides = {}) => {
+    const v = {
+      clubId: overrides.clubId !== undefined ? overrides.clubId : clubId,
+      distance: overrides.distance !== undefined ? overrides.distance : distance,
+      lie: overrides.lie !== undefined ? overrides.lie : lie,
+      nextLie: overrides.nextLie !== undefined ? overrides.nextLie : nextLie,
+      direction: overrides.direction !== undefined ? overrides.direction : direction,
+      depth: overrides.depth !== undefined ? overrides.depth : depth,
+      selfRating: overrides.selfRating !== undefined ? overrides.selfRating : selfRating,
+      contact: overrides.contact !== undefined ? overrides.contact : contact,
+      wedgeTargetDistance: overrides.wedgeTargetDistance !== undefined
+        ? overrides.wedgeTargetDistance : wedgeTargetDistance,
+      wedgeDistance: overrides.wedgeDistance !== undefined
+        ? overrides.wedgeDistance : wedgeDistance,
+      wedgeResults: overrides.wedgeResults !== undefined
+        ? overrides.wedgeResults : wedgeResults,
+    };
     const missing = [];
-    if (!clubId) {
+    if (!v.clubId) {
       missing.push({
         key: "clubId",
         question: "🤖 どのクラブで打ちましたか？",
         required: true,
       });
+      return missing;
     }
-    // クラブ確定後でないと、後続の必須/任意の判定ができないので一度ここで止める
-    if (!clubId) return missing;
 
-    const club = clubs.find((c) => c.id === clubId);
+    const club = clubs.find((c) => c.id === v.clubId);
     const isW = club?.category === "wedge";
     const isP = club?.category === "putter";
 
     if (isP) {
-      // パターは現状の対話モードでは扱わない（既存UIに誘導）
+      // パターは対話モードでは扱わない
       return [];
     }
 
     if (isW) {
       // ウェッジ
-      if (wedgeTargetDistance == null) {
+      if (v.wedgeTargetDistance == null) {
         missing.push({
           key: "wedgeTargetDistance",
           question: "🤖 ピンまでの距離は？",
-          required: true,
+          required: false, // v2.5: ウェッジは距離も任意
         });
       }
-      if (wedgeDistance == null) {
+      if (v.wedgeDistance == null) {
         missing.push({
           key: "wedgeDistance",
           question: "🤖 実際に飛んだ距離は？",
-          required: true,
-        });
-      }
-      if (wedgeResults.length === 0) {
-        missing.push({
-          key: "wedgeResults",
-          question:
-            "🤖 結果は？（カップイン/グリーン乗/ショート/オーバー/左外し/右外し）",
           required: false,
         });
       }
-      if (!selfRating) {
+      if (!v.wedgeResults || v.wedgeResults.length === 0) {
+        missing.push({
+          key: "wedgeResults",
+          question:
+            "🤖 結果は？（カップイン/グリーン乗/ショート/オーバー/左外し/右外し・スキップ可）",
+          required: false,
+        });
+      }
+      if (!v.selfRating) {
         missing.push({
           key: "selfRating",
           question: "🤖 自己評価は？（◎/○/△/×）",
           required: true,
         });
       }
-      if (!contact) {
+      if (!v.contact) {
         missing.push({
           key: "contact",
           question: "🤖 打感は？（ナイス/ダフリ/トップ/シャンク・スキップ可）",
@@ -4335,25 +4355,21 @@ function ShotEditor({
       }
     } else {
       // 通常クラブ
-      if (distance == null) {
+      if (v.distance == null) {
         missing.push({
           key: "distance",
           question: "🤖 距離は何ヤードでしたか？",
           required: true,
         });
       }
-      if (!lie || (shotNumber > 1 && !lie)) {
-        // ライは1打目=tee、2打目以降は必須
-        if (shotNumber !== 1) {
-          missing.push({
-            key: "lie",
-            question: "🤖 どこから打ちましたか？（フェアウェイ・ラフなど）",
-            required: true,
-          });
-        }
+      if (shotNumber !== 1 && !v.lie) {
+        missing.push({
+          key: "lie",
+          question: "🤖 どこから打ちましたか？（フェアウェイ・ラフなど）",
+          required: true,
+        });
       }
-      if (!nextLie || nextLie === "fw") {
-        // nextLie はデフォルトで "fw" が入っている、明示的に問う
+      if (!v.nextLie || v.nextLie === "fw") {
         missing.push({
           key: "nextLie",
           question:
@@ -4361,28 +4377,28 @@ function ShotEditor({
           required: true,
         });
       }
-      if (!direction) {
-        missing.push({
-          key: "direction",
-          question: "🤖 方向は？（左/真っ直ぐ/右・スキップ可）",
-          required: false,
-        });
-      }
-      if (!depth) {
-        missing.push({
-          key: "depth",
-          question: "🤖 距離感は？（ショート/ピン/オーバー・スキップ可）",
-          required: false,
-        });
-      }
-      if (!selfRating) {
+      if (!v.selfRating) {
         missing.push({
           key: "selfRating",
           question: "🤖 自己評価は？（◎/○/△/×）",
           required: true,
         });
       }
-      if (!contact) {
+      if (!v.direction) {
+        missing.push({
+          key: "direction",
+          question: "🤖 方向は？（左/真っ直ぐ/右・スキップ可）",
+          required: false,
+        });
+      }
+      if (!v.depth) {
+        missing.push({
+          key: "depth",
+          question: "🤖 距離感は？（ショート/ピン/オーバー・スキップ可）",
+          required: false,
+        });
+      }
+      if (!v.contact) {
         missing.push({
           key: "contact",
           question: "🤖 打感は？（ナイス/ダフリ/トップ/シャンク・スキップ可）",
@@ -4407,14 +4423,20 @@ function ShotEditor({
       setVoiceError("音声入力はこのブラウザで対応していません");
       return;
     }
+    // v3.1: refs リセット
+    lastTranscriptRef.current = "";
+    lastQuestionRef.current = "";
+    isProcessingResultRef.current = false;
     setChatVoiceMode(true);
+    const initialMsg = "🤖 ショットを教えてください。「7番アイアン150ヤード、フェアウェイから」のように一気に話せます。";
     setChatMessages([
       {
         role: "ai",
-        text: "🤖 ショットを教えてください。「7番アイアン150ヤード、フェアウェイから」のように一気に話せます。",
+        text: initialMsg,
         timestamp: Date.now(),
       },
     ]);
+    lastQuestionRef.current = initialMsg;
   };
 
   // v3: 対話モード終了
@@ -4424,6 +4446,10 @@ function ShotEditor({
         chatRecognitionRef.current.abort();
       } catch {}
     }
+    // v3.1: refs リセット
+    lastTranscriptRef.current = "";
+    lastQuestionRef.current = "";
+    isProcessingResultRef.current = false;
     setChatVoiceMode(false);
     setChatMessages([]);
     setChatVoiceState("idle");
@@ -4432,25 +4458,58 @@ function ShotEditor({
   // v3: 対話モードでの音声録音
   const startChatRecognition = () => {
     if (!speechSupported) return;
+    // 録音開始時、直前のtranscriptと処理中フラグをリセット
+    lastTranscriptRef.current = "";
+    isProcessingResultRef.current = false;
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
     recognition.lang = "ja-JP";
     recognition.continuous = false;
     recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
       setChatVoiceState("listening");
     };
     recognition.onerror = (e) => {
       setChatVoiceState("idle");
-      addChatMessage("ai", "⚠️ 認識できませんでした。もう一度お願いします。");
+      isProcessingResultRef.current = false;
+      // no-speech エラー以外は通知
+      if (e.error !== "no-speech" && e.error !== "aborted") {
+        addChatMessage("ai", "⚠️ 認識できませんでした。もう一度お願いします。");
+      }
     };
     recognition.onend = () => {
       setChatVoiceState("idle");
     };
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
+      // v3.1: 同じonresultが複数回発火する問題対策
+      // 処理中フラグが立っていたら無視
+      if (isProcessingResultRef.current) return;
+
+      // v3.1: 最終結果（isFinal）の最後だけ取得
+      let finalTranscript = "";
+      for (let i = 0; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          finalTranscript = event.results[i][0].transcript;
+        }
+      }
+      // interimResults=false なので通常 isFinal=true だが、念のため最後も取得
+      if (!finalTranscript && event.results.length > 0) {
+        const last = event.results[event.results.length - 1];
+        if (last && last[0]) finalTranscript = last[0].transcript;
+      }
+
+      const transcript = (finalTranscript || "").trim();
+      if (!transcript) return;
+
+      // v3.1: 同一の transcript は重複として無視
+      if (transcript === lastTranscriptRef.current) return;
+      lastTranscriptRef.current = transcript;
+
+      // 処理中フラグON
+      isProcessingResultRef.current = true;
       setChatVoiceState("processing");
       try {
         recognition.abort();
@@ -4460,10 +4519,12 @@ function ShotEditor({
       addChatMessage("user", transcript);
 
       // スキップキーワード検出
-      if (/^スキップ$|^とばす$|^飛ばす$|^skip$/i.test(transcript.trim())) {
-        // 直前の質問項目を「スキップ」扱い（特に何も入れない）
+      if (/^スキップ$|^とばす$|^飛ばす$|^skip$/i.test(transcript)) {
         addChatMessage("ai", "🤖 スキップしました。次へ進みます。");
-        setTimeout(() => askNextOrConfirm(), 400);
+        setTimeout(() => {
+          askNextOrConfirm();
+          isProcessingResultRef.current = false;
+        }, 400);
         return;
       }
 
@@ -4471,7 +4532,7 @@ function ShotEditor({
       const currentValues = {
         clubId,
         distance,
-        nextLie: nextLie === "fw" ? null : nextLie, // "fw" デフォルトは未入力扱い
+        nextLie: nextLie === "fw" ? null : nextLie,
         direction,
         depth,
         selfRating,
@@ -4484,7 +4545,7 @@ function ShotEditor({
       };
       const { updates } = parseTranscript(transcript, currentValues);
 
-      // フィールドを更新
+      // フィールドを更新（state setter）
       if ("clubId" in updates) setClubId(updates.clubId);
       if ("distance" in updates) setDistance(updates.distance);
       if ("lie" in updates) setLie(updates.lie);
@@ -4499,6 +4560,9 @@ function ShotEditor({
         setWedgeDistance(updates.wedgeDistance);
       if ("wedgeResults" in updates) setWedgeResults(updates.wedgeResults);
       if ("contact" in updates) setContact(updates.contact);
+
+      // v3.1: state更新を待たず、override で直接判定するための値を構築
+      const newValues = { ...currentValues, ...updates };
 
       // 解析結果を表示してから次の質問へ
       const updatedKeys = Object.keys(updates);
@@ -4527,10 +4591,15 @@ function ShotEditor({
           })
           .join(" / ");
         addChatMessage("ai", `🤖 認識: ${summary}`);
+      } else {
+        addChatMessage("ai", "🤖 認識できませんでした。もう一度お願いします。");
       }
 
-      // 次の質問または完了確認
-      setTimeout(() => askNextOrConfirm(), 600);
+      // v3.1: 次の質問は newValues（更新後）で判定
+      setTimeout(() => {
+        askNextOrConfirm(newValues);
+        isProcessingResultRef.current = false;
+      }, 600);
     };
 
     chatRecognitionRef.current = recognition;
@@ -4538,25 +4607,27 @@ function ShotEditor({
       recognition.start();
     } catch (e) {
       setChatVoiceState("idle");
+      isProcessingResultRef.current = false;
     }
   };
 
   // v3: 次の質問または完了確認
-  const askNextOrConfirm = () => {
-    const missing = getMissingFields();
+  // v3.1: overrideValues 受け取り + 連投防止
+  const askNextOrConfirm = (overrides = {}) => {
+    const missing = getMissingFields(overrides);
     const requiredMissing = missing.filter((m) => m.required);
+    let nextQuestion;
     if (requiredMissing.length > 0) {
-      addChatMessage("ai", requiredMissing[0].question);
+      nextQuestion = requiredMissing[0].question;
     } else if (missing.length > 0) {
-      // 任意項目の質問（スキップ可）
-      addChatMessage("ai", missing[0].question);
+      nextQuestion = missing[0].question;
     } else {
-      // 全部揃った
-      addChatMessage(
-        "ai",
-        "🤖 全項目の入力が完了しました。下の「保存」ボタンで保存してください。"
-      );
+      nextQuestion = "🤖 全項目の入力が完了しました。下の「保存」ボタンで保存してください。";
     }
+    // 同じ質問を直前に出していたら追加しない（連投防止）
+    if (lastQuestionRef.current === nextQuestion) return;
+    lastQuestionRef.current = nextQuestion;
+    addChatMessage("ai", nextQuestion);
   };
 
   // v3: 対話で次の質問をトリガー（録音停止後）
