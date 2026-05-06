@@ -4319,6 +4319,13 @@ function ShotEditor({
           required: false,
         });
       }
+      if (!selfRating) {
+        missing.push({
+          key: "selfRating",
+          question: "🤖 自己評価は？（◎/○/△/×）",
+          required: true,
+        });
+      }
       if (!contact) {
         missing.push({
           key: "contact",
@@ -4371,8 +4378,8 @@ function ShotEditor({
       if (!selfRating) {
         missing.push({
           key: "selfRating",
-          question: "🤖 自己評価は？（◎/○/△/×・スキップ可）",
-          required: false,
+          question: "🤖 自己評価は？（◎/○/△/×）",
+          required: true,
         });
       }
       if (!contact) {
@@ -4744,14 +4751,16 @@ function ShotEditor({
       .filter((g) => g.items.length);
   }, [clubs]);
 
+  // v2.5: 自己評価必須（パター除く）
+  // v2.5: 必須項目
+  // - パター: クラブ + パット結果
+  // - ウェッジ: クラブ + 自己評価のみ（距離・結果は任意）
+  // - 通常: クラブ + 結果(outcome) + ライ + 自己評価
   const canSave = isPutter
     ? clubId && puttResult
     : isWedge
-    ? clubId &&
-      (wedgeResults.length > 0 ||
-        wedgeDistance != null ||
-        wedgeTargetDistance != null)
-    : clubId && outcome && lie;
+    ? clubId && selfRating
+    : clubId && outcome && lie && selfRating;
 
   // v3: 対話音声モード - チャット式UI
   if (chatVoiceMode) {
@@ -5115,9 +5124,13 @@ function ShotEditor({
                 checked={isMiss}
                 onChange={(e) => {
                   setIsMiss(e.target.checked);
-                  if (!e.target.checked) {
-                    // チェック外したらミスタイプもクリア
+                  if (e.target.checked) {
+                    // v2.5: ミスチェックで自己評価を「×」に自動設定（手動変更可）
+                    setSelfRating("bad");
+                  } else {
+                    // チェック外したらミスタイプ・自己評価もクリア
                     setMissTypes([]);
+                    setSelfRating(null);
                   }
                 }}
               />
@@ -5158,6 +5171,31 @@ function ShotEditor({
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* v2.5: 自己評価（必須） - ミスショット直下、パター以外 */}
+        {!isPutter && (
+          <div className={`editor-section rating-section ${highlightFields.selfRating ? "highlight" : ""}`}>
+            <div className="editor-label">
+              自己評価 <span className="required-badge">必須</span>
+            </div>
+            <div className="result-row">
+              {SELF_RATINGS.map((r) => (
+                <button
+                  key={r.id}
+                  className={`result-btn tone-${r.tone} ${
+                    selfRating === r.id ? "on" : ""
+                  }`}
+                  onClick={() =>
+                    setSelfRating(selfRating === r.id ? null : r.id)
+                  }
+                  title={r.desc}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -5270,26 +5308,6 @@ function ShotEditor({
             >
               ↑ オーバー
             </button>
-          </div>
-        </div>
-
-        <div className={`editor-section ${highlightFields.selfRating ? "highlight" : ""}`}>
-          <div className="editor-label">自己評価（任意）</div>
-          <div className="result-row">
-            {SELF_RATINGS.map((r) => (
-              <button
-                key={r.id}
-                className={`result-btn tone-${r.tone} ${
-                  selfRating === r.id ? "on" : ""
-                }`}
-                onClick={() =>
-                  setSelfRating(selfRating === r.id ? null : r.id)
-                }
-                title={r.desc}
-              >
-                {r.label}
-              </button>
-            ))}
           </div>
         </div>
 
@@ -5669,26 +5687,6 @@ function ShotEditor({
                       ))}
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="editor-section">
-              <div className="editor-label">自己評価（任意）</div>
-              <div className="result-row">
-                {SELF_RATINGS.map((r) => (
-                  <button
-                    key={r.id}
-                    className={`result-btn tone-${r.tone} ${
-                      selfRating === r.id ? "on" : ""
-                    }`}
-                    onClick={() =>
-                      setSelfRating(selfRating === r.id ? null : r.id)
-                    }
-                    title={r.desc}
-                  >
-                    {r.label}
-                  </button>
                 ))}
               </div>
             </div>
@@ -9093,6 +9091,26 @@ function Style() {
         background: rgba(255, 184, 77, 0.18);
         color: var(--amber);
         font-weight: 600;
+      }
+
+      /* v2.5: 必須バッジ */
+      .required-badge {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 1px 6px;
+        background: var(--red);
+        color: #fff;
+        font-size: 9px;
+        font-weight: 700;
+        border-radius: 3px;
+        letter-spacing: 0.5px;
+      }
+      /* v2.5: 自己評価セクションを目立たせる */
+      .rating-section {
+        background: rgba(94, 184, 255, 0.05);
+        border: 1px solid rgba(94, 184, 255, 0.15);
+        border-radius: 12px;
+        padding: 12px;
       }
       .shot-lie {
         font-size: 10px; color: var(--text-dim);
