@@ -3843,6 +3843,331 @@ function ShotRowInner({ index, shot, clubs, unit, onClick }) {
 }
 
 // ============================================================
+//  v3.2: チャット式音声入力 - 選択肢ボタン
+// ============================================================
+function ChatChoiceButtons({
+  askingKey,
+  clubs,
+  unit,
+  numericInput,
+  setNumericInput,
+  multiSelect,
+  setMultiSelect,
+  onChoose,
+  onSkip,
+}) {
+  // 数値入力（距離系）の確定ハンドラ
+  const handleNumericConfirm = () => {
+    const n = parseInt(numericInput, 10);
+    if (!isNaN(n) && n > 0) {
+      onChoose(askingKey, n, `${n}${unit}`);
+    }
+  };
+
+  // 距離・ピンまで・実距離 共通のクイックボタン
+  const renderDistanceChoices = (presets) => (
+    <>
+      <div className="chat-choices-grid distance">
+        {presets.map((p) => (
+          <button
+            key={p}
+            className="chat-choice-btn"
+            onClick={() => onChoose(askingKey, p, `${p}${unit}`)}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+      <div className="chat-choices-numeric">
+        <input
+          type="number"
+          inputMode="numeric"
+          className="chat-numeric-input"
+          placeholder="数値入力"
+          value={numericInput}
+          onChange={(e) => setNumericInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleNumericConfirm();
+          }}
+        />
+        <button
+          className="chat-numeric-confirm"
+          onClick={handleNumericConfirm}
+          disabled={!numericInput || isNaN(parseInt(numericInput, 10))}
+        >
+          OK
+        </button>
+      </div>
+      <button className="chat-skip-inline" onClick={onSkip}>
+        ⏭ スキップ
+      </button>
+    </>
+  );
+
+  // クラブ選択
+  if (askingKey === "clubId") {
+    return (
+      <div className="chat-choices-grid clubs">
+        {clubs.map((c) => (
+          <button
+            key={c.id}
+            className="chat-choice-btn"
+            onClick={() => onChoose("clubId", c.id, c.name)}
+          >
+            {c.name}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  // 距離（通常クラブ）
+  if (askingKey === "distance") {
+    return renderDistanceChoices([50, 80, 100, 120, 140, 150, 170, 200, 230]);
+  }
+
+  // ピンまで距離
+  if (askingKey === "wedgeTargetDistance") {
+    return renderDistanceChoices([20, 30, 40, 50, 60, 70, 80, 100]);
+  }
+
+  // 実距離
+  if (askingKey === "wedgeDistance") {
+    return renderDistanceChoices([20, 30, 40, 50, 60, 70, 80, 100]);
+  }
+
+  // ライ
+  if (askingKey === "lie") {
+    const opts = [
+      { id: "tee", label: "ティー" },
+      { id: "fw", label: "FW" },
+      { id: "rough", label: "ラフ" },
+      { id: "bunker", label: "バンカー" },
+      { id: "green", label: "グリーン" },
+    ];
+    return (
+      <>
+        <div className="chat-choices-grid">
+          {opts.map((o) => (
+            <button
+              key={o.id}
+              className="chat-choice-btn"
+              onClick={() => onChoose("lie", o.id, o.label)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <button className="chat-skip-inline" onClick={onSkip}>
+          ⏭ スキップ
+        </button>
+      </>
+    );
+  }
+
+  // 着地（nextLie）
+  if (askingKey === "nextLie") {
+    const opts = [
+      { id: "fw", label: "FW" },
+      { id: "rough", label: "ラフ" },
+      { id: "bunker", label: "バンカー" },
+      { id: "green", label: "グリーン" },
+      { id: "pond", label: "池" },
+      { id: "ob", label: "OB" },
+    ];
+    return (
+      <>
+        <div className="chat-choices-grid">
+          {opts.map((o) => (
+            <button
+              key={o.id}
+              className="chat-choice-btn"
+              onClick={() => onChoose("nextLie", o.id, o.label)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <button className="chat-skip-inline" onClick={onSkip}>
+          ⏭ スキップ
+        </button>
+      </>
+    );
+  }
+
+  // 方向
+  if (askingKey === "direction") {
+    const opts = [
+      { id: "left", label: "← 左" },
+      { id: "straight", label: "↑ 直" },
+      { id: "right", label: "→ 右" },
+    ];
+    return (
+      <>
+        <div className="chat-choices-grid three-cols">
+          {opts.map((o) => (
+            <button
+              key={o.id}
+              className="chat-choice-btn"
+              onClick={() => onChoose("direction", o.id, o.label)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <button className="chat-skip-inline" onClick={onSkip}>
+          ⏭ スキップ
+        </button>
+      </>
+    );
+  }
+
+  // 距離感
+  if (askingKey === "depth") {
+    const opts = [
+      { id: "short", label: "ショート" },
+      { id: "pin", label: "ピン" },
+      { id: "over", label: "オーバー" },
+    ];
+    return (
+      <>
+        <div className="chat-choices-grid three-cols">
+          {opts.map((o) => (
+            <button
+              key={o.id}
+              className="chat-choice-btn"
+              onClick={() => onChoose("depth", o.id, o.label)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <button className="chat-skip-inline" onClick={onSkip}>
+          ⏭ スキップ
+        </button>
+      </>
+    );
+  }
+
+  // 自己評価
+  if (askingKey === "selfRating") {
+    const opts = [
+      { id: "good", label: "◎ ナイス", tone: "good" },
+      { id: "ok", label: "○ OK", tone: "ok" },
+      { id: "miss", label: "△ ミス", tone: "miss" },
+      { id: "bad", label: "× 大ミス", tone: "bad" },
+    ];
+    return (
+      <div className="chat-choices-grid two-cols">
+        {opts.map((o) => (
+          <button
+            key={o.id}
+            className={`chat-choice-btn tone-${o.tone}`}
+            onClick={() => onChoose("selfRating", o.id, o.label)}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  // 打感
+  if (askingKey === "contact") {
+    const opts = [
+      { id: "nice", label: "ナイス", tone: "good" },
+      { id: "duff", label: "ダフリ", tone: "miss" },
+      { id: "top", label: "トップ", tone: "miss" },
+      { id: "shank", label: "シャンク", tone: "miss" },
+    ];
+    return (
+      <>
+        <div className="chat-choices-grid two-cols">
+          {opts.map((o) => (
+            <button
+              key={o.id}
+              className={`chat-choice-btn tone-${o.tone}`}
+              onClick={() => onChoose("contact", o.id, o.label)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <button className="chat-skip-inline" onClick={onSkip}>
+          ⏭ スキップ
+        </button>
+      </>
+    );
+  }
+
+  // ウェッジ結果（複数選択）
+  if (askingKey === "wedgeResults") {
+    const opts = [
+      { id: "pin", label: "🎯 カップイン" },
+      { id: "green", label: "○ 乗" },
+      { id: "short", label: "↓ ショート" },
+      { id: "over", label: "↑ オーバー" },
+      { id: "left", label: "← 左外し" },
+      { id: "right", label: "→ 右外し" },
+    ];
+    const toggleResult = (id) => {
+      // グループ排他制御
+      const groups = {
+        pin: ["pin", "green"],
+        green: ["pin", "green"],
+        short: ["short", "over"],
+        over: ["short", "over"],
+        left: ["left", "right"],
+        right: ["left", "right"],
+      };
+      const groupIds = groups[id] || [id];
+      const isOn = multiSelect.includes(id);
+      const next = multiSelect.filter((x) => !groupIds.includes(x));
+      if (!isOn) next.push(id);
+      setMultiSelect(next);
+    };
+    const handleConfirm = () => {
+      const labels = multiSelect
+        .map((id) => opts.find((o) => o.id === id)?.label)
+        .filter(Boolean)
+        .join(" + ");
+      onChoose("wedgeResults", multiSelect, labels || "なし");
+    };
+    return (
+      <>
+        <div className="chat-choices-grid two-cols">
+          {opts.map((o) => (
+            <button
+              key={o.id}
+              className={`chat-choice-btn ${
+                multiSelect.includes(o.id) ? "selected" : ""
+              }`}
+              onClick={() => toggleResult(o.id)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <div className="chat-multi-actions">
+          <button className="chat-skip-inline" onClick={onSkip}>
+            ⏭ スキップ
+          </button>
+          <button
+            className="chat-confirm-inline"
+            onClick={handleConfirm}
+            disabled={multiSelect.length === 0}
+          >
+            次へ →
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  return null;
+}
+
+// ============================================================
 //  SHOT EDITOR
 // ============================================================
 function ShotEditor({
@@ -3942,6 +4267,12 @@ function ShotEditor({
   const [chatVoiceMode, setChatVoiceMode] = useState(false); // 対話モードのオン/オフ
   const [chatMessages, setChatMessages] = useState([]); // {role: 'ai'|'user', text: string, timestamp: number}[]
   const [chatVoiceState, setChatVoiceState] = useState("idle"); // idle|listening|processing
+  // v3.2: 現在AIが聞いている項目キー（ボタン表示用）
+  const [currentAskingKey, setCurrentAskingKey] = useState(null);
+  // v3.2: 距離・ピンまで距離・実距離 用の手入力モード
+  const [chatNumericInput, setChatNumericInput] = useState("");
+  // v3.2: 複数選択（ウェッジ結果）用の一時保持
+  const [chatMultiSelect, setChatMultiSelect] = useState([]);
   const chatRecognitionRef = useRef(null);
   // v3.1: 重複認識・連投防止用 ref
   const lastTranscriptRef = useRef(""); // 直前に処理した認識結果
@@ -4613,21 +4944,34 @@ function ShotEditor({
 
   // v3: 次の質問または完了確認
   // v3.1: overrideValues 受け取り + 連投防止
+  // v3.2: currentAskingKey も更新（ボタン表示用）
   const askNextOrConfirm = (overrides = {}) => {
     const missing = getMissingFields(overrides);
     const requiredMissing = missing.filter((m) => m.required);
     let nextQuestion;
+    let nextKey = null;
     if (requiredMissing.length > 0) {
       nextQuestion = requiredMissing[0].question;
+      nextKey = requiredMissing[0].key;
     } else if (missing.length > 0) {
       nextQuestion = missing[0].question;
+      nextKey = missing[0].key;
     } else {
       nextQuestion = "🤖 全項目の入力が完了しました。下の「保存」ボタンで保存してください。";
+      nextKey = null;
     }
     // 同じ質問を直前に出していたら追加しない（連投防止）
-    if (lastQuestionRef.current === nextQuestion) return;
+    if (lastQuestionRef.current === nextQuestion) {
+      // 質問は追加しないが、askingKey は更新（ボタン表示の整合性のため）
+      setCurrentAskingKey(nextKey);
+      return;
+    }
     lastQuestionRef.current = nextQuestion;
     addChatMessage("ai", nextQuestion);
+    setCurrentAskingKey(nextKey);
+    // 数字入力 / 複数選択の一時状態をクリア
+    setChatNumericInput("");
+    setChatMultiSelect([]);
   };
 
   // v3: 対話で次の質問をトリガー（録音停止後）
@@ -4637,6 +4981,92 @@ function ShotEditor({
         chatRecognitionRef.current.stop();
       } catch {}
     }
+  };
+
+  // v3.2: ボタンタップで値をセット（チャットに「○○を選択」表示 + 次の質問へ）
+  const applyChatChoice = (key, value, displayLabel) => {
+    // 現在の値を取得（override 用）
+    const currentValues = {
+      clubId,
+      distance,
+      lie,
+      nextLie: nextLie === "fw" ? null : nextLie,
+      direction,
+      depth,
+      selfRating,
+      contact,
+      wedgeTargetDistance,
+      wedgeDistance,
+      wedgeResults,
+    };
+    const newValues = { ...currentValues };
+
+    // state を更新
+    if (key === "clubId") {
+      setClubId(value);
+      newValues.clubId = value;
+    } else if (key === "distance") {
+      setDistance(value);
+      newValues.distance = value;
+    } else if (key === "lie") {
+      setLie(value);
+      newValues.lie = value;
+    } else if (key === "nextLie") {
+      setNextLie(value);
+      newValues.nextLie = value;
+    } else if (key === "direction") {
+      setDirection(value);
+      newValues.direction = value;
+    } else if (key === "depth") {
+      setDepth(value);
+      newValues.depth = value;
+    } else if (key === "selfRating") {
+      setSelfRating(value);
+      newValues.selfRating = value;
+      // ミスチェックが連動：×なら isMiss を true、それ以外は false
+      if (value === "bad") {
+        setIsMiss(true);
+      } else {
+        setIsMiss(false);
+      }
+    } else if (key === "contact") {
+      setContact(value);
+      newValues.contact = value;
+    } else if (key === "wedgeTargetDistance") {
+      setWedgeTargetDistance(value);
+      newValues.wedgeTargetDistance = value;
+    } else if (key === "wedgeDistance") {
+      setWedgeDistance(value);
+      newValues.wedgeDistance = value;
+    } else if (key === "wedgeResults") {
+      setWedgeResults(value);
+      newValues.wedgeResults = value;
+    }
+
+    // チャットに「○○を選択」と表示
+    addChatMessage("user", `${displayLabel}を選択`);
+
+    // 次の質問へ
+    setCurrentAskingKey(null);
+    setChatNumericInput("");
+    setChatMultiSelect([]);
+    setTimeout(() => askNextOrConfirm(newValues), 300);
+  };
+
+  // v3.2: スキップボタン（チャット内）
+  const handleChatSkip = () => {
+    addChatMessage("user", "（スキップ）");
+    setCurrentAskingKey(null);
+    setChatNumericInput("");
+    setChatMultiSelect([]);
+    setTimeout(() => {
+      // 現在の質問項目を「スキップ」扱いにするため、override で空オブジェクトを渡す
+      // → 次の missing 項目に進む
+      // ただし、required な項目はスキップできない設計なので、required の場合は同じ質問になる
+      // 連投防止 ref をクリアして強制的に次へ
+      lastQuestionRef.current = "";
+      askNextOrConfirm();
+    }, 300);
   };
 
   const startVoiceInput = () => {
@@ -4911,6 +5341,23 @@ function ShotEditor({
             {chatVoiceState === "processing" && (
               <div className="chat-bubble chat-ai">
                 <div className="chat-bubble-text">考え中…</div>
+              </div>
+            )}
+
+            {/* v3.2: 質問項目別の選択肢ボタン（右側、ユーザー側に表示） */}
+            {chatVoiceState === "idle" && currentAskingKey && (
+              <div className="chat-choices">
+                <ChatChoiceButtons
+                  askingKey={currentAskingKey}
+                  clubs={clubs}
+                  unit={unit}
+                  numericInput={chatNumericInput}
+                  setNumericInput={setChatNumericInput}
+                  multiSelect={chatMultiSelect}
+                  setMultiSelect={setChatMultiSelect}
+                  onChoose={applyChatChoice}
+                  onSkip={handleChatSkip}
+                />
               </div>
             )}
           </div>
@@ -9670,6 +10117,143 @@ function Style() {
         font-weight: 700;
         white-space: nowrap;
       }
+
+      /* v3.2: 選択肢ボタン群（チャット内・右寄せ） */
+      .chat-choices {
+        align-self: flex-end;
+        max-width: 88%;
+        background: rgba(94, 184, 255, 0.06);
+        border: 1px solid rgba(94, 184, 255, 0.2);
+        border-radius: 12px;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .chat-choices-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+      }
+      .chat-choices-grid.clubs {
+        grid-template-columns: repeat(4, 1fr);
+      }
+      .chat-choices-grid.distance {
+        grid-template-columns: repeat(4, 1fr);
+      }
+      .chat-choices-grid.two-cols {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .chat-choices-grid.three-cols {
+        grid-template-columns: repeat(3, 1fr);
+      }
+      .chat-choice-btn {
+        padding: 10px 6px;
+        background: var(--bg-2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s;
+        text-align: center;
+      }
+      .chat-choice-btn:active {
+        transform: scale(0.95);
+      }
+      .chat-choice-btn.selected {
+        background: rgba(182, 242, 74, 0.2);
+        border-color: var(--green);
+        color: var(--green);
+      }
+      .chat-choice-btn.tone-good {
+        border-color: rgba(182, 242, 74, 0.4);
+        color: var(--green);
+      }
+      .chat-choice-btn.tone-ok {
+        color: var(--text);
+      }
+      .chat-choice-btn.tone-miss {
+        border-color: rgba(255, 184, 77, 0.3);
+        color: var(--amber);
+      }
+      .chat-choice-btn.tone-bad {
+        border-color: rgba(255, 107, 107, 0.4);
+        color: var(--red);
+      }
+      .chat-choices-numeric {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .chat-numeric-input {
+        flex: 1;
+        padding: 10px 8px;
+        background: var(--bg-2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 14px;
+        font-weight: 700;
+        text-align: center;
+        outline: none;
+      }
+      .chat-numeric-input:focus {
+        border-color: var(--green);
+      }
+      .chat-numeric-confirm {
+        padding: 10px 16px;
+        background: var(--green);
+        color: #0a0a0a;
+        border: none;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .chat-numeric-confirm:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .chat-skip-inline {
+        align-self: stretch;
+        padding: 6px 10px;
+        background: transparent;
+        border: 1px dashed var(--border-soft);
+        border-radius: 6px;
+        color: var(--text-faint);
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .chat-skip-inline:active {
+        background: var(--bg-1);
+      }
+      .chat-multi-actions {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .chat-multi-actions .chat-skip-inline {
+        flex: 1;
+      }
+      .chat-confirm-inline {
+        flex: 1;
+        padding: 8px 12px;
+        background: var(--green);
+        color: #0a0a0a;
+        border: none;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .chat-confirm-inline:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
       .chat-actions {
         display: grid;
         grid-template-columns: 1fr auto auto;
