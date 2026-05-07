@@ -3308,13 +3308,28 @@ function RoundView({
                   }
                   // ホールデータ更新
                   const next = { ...h, shots: newShots };
-                  // パターの場合のみ manualPutts/manualScore を未入力時に自動加算
+                  // パターの場合のみ manualPutts/manualScore を自動加算
+                  // - manualPutts: パター数を newShots 内のパター数に合わせる
+                  // - manualScore: 全ショット数（newShots.length）以上になるよう調整
+                  // ★ 既に手入力で設定済みの場合は、ショット数より少ないなら自動増やす
                   if (isPutterShot) {
-                    if (next.manualPutts === undefined) {
-                      next.manualPutts = puttCount;
+                    // newShots 内のパター本数
+                    const putterCount = newShots.filter((s) => {
+                      const c = clubs.find((cc) => cc.id === s.clubId);
+                      return c?.category === "putter";
+                    }).length;
+                    // manualPutts は putterCount に追従
+                    if (
+                      next.manualPutts === undefined ||
+                      next.manualPutts < putterCount
+                    ) {
+                      next.manualPutts = putterCount;
                     }
-                    if (next.manualScore === undefined) {
-                      // 新しいショット総数を採用
+                    // manualScore はショット総数に追従（より大きい値があればそれを優先）
+                    if (
+                      next.manualScore === undefined ||
+                      next.manualScore < newShots.length
+                    ) {
                       next.manualScore = newShots.length;
                     }
                   }
@@ -6556,7 +6571,10 @@ function WedgeTab({ usedWedges, unit }) {
               <div key={s.club.id} className="wedge-card">
                 <div className="wedge-card-head">
                   <div className="wedge-card-club">{s.club.name}</div>
-                  <div className="wedge-card-n">{s.n}回</div>
+                  <div className="wedge-card-n">
+                    <span className="club-list-n-num">{s.n}</span>
+                    <span className="club-list-n-unit">shots</span>
+                  </div>
                 </div>
                 <div className="wedge-card-stats">
                   <div className="wedge-stat">
@@ -6687,7 +6705,10 @@ function ShotTab({ usedClubs, unit, state, onClubClick }) {
             >
               <div className="club-list-head">
                 <div className="club-list-name">{s.club.name}</div>
-                <div className="club-list-n">{s.n}回</div>
+                <div className="club-list-n">
+                  <span className="club-list-n-num">{s.n}</span>
+                  <span className="club-list-n-unit">shots</span>
+                </div>
               </div>
               <div className="club-list-stats">
                 <div className="club-list-stat">
@@ -9269,6 +9290,10 @@ function Style() {
       .wedge-card-n {
         font-size: 12px;
         color: var(--text-faint);
+        display: flex;
+        align-items: baseline;
+        gap: 4px;
+        padding-right: 4px;
       }
       .wedge-card-stats {
         display: grid;
@@ -10737,8 +10762,24 @@ function Style() {
         font-weight: 700;
       }
       .club-list-n {
-        font-size: 11px;
+        font-size: 12px;
         color: var(--text-faint);
+        display: flex;
+        align-items: baseline;
+        gap: 4px;
+        padding-right: 4px;
+      }
+      .club-list-n-num {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text-dim);
+      }
+      .club-list-n-unit {
+        font-size: 10px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
       }
       .club-list-stats {
         display: grid;
