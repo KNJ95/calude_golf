@@ -1428,6 +1428,59 @@ function buildRoundReviewPrompt(round, clubs, unit) {
     }
   }
 
+  // v2.5: このラウンドのパッティング集計
+  const putterShots = [];
+  round.holes.forEach((h) => {
+    (h.shots || []).forEach((s) => {
+      const c = clubs.find((cc) => cc.id === s.clubId);
+      if (c?.category === "putter") putterShots.push(s);
+    });
+  });
+  if (putterShots.length > 0) {
+    lines.push("");
+    lines.push("## このラウンドのパッティング");
+    lines.push("");
+    const totalPutts = putterShots.length;
+    const inCount = putterShots.filter((s) => s.puttResult === "in").length;
+    const okCount = putterShots.filter((s) => s.puttResult === "ok").length;
+    const shortCount = putterShots.filter(
+      (s) => s.puttResult === "short"
+    ).length;
+    const overCount = putterShots.filter((s) => s.puttResult === "over").length;
+    const leftCount = putterShots.filter((s) => s.puttResult === "left").length;
+    const rightCount = putterShots.filter(
+      (s) => s.puttResult === "right"
+    ).length;
+    lines.push(`- 総パット数: ${totalPutts}`);
+    lines.push(
+      `- カップイン: ${inCount} / OK圏内: ${okCount} / ショート: ${shortCount} / オーバー: ${overCount} / 左外し: ${leftCount} / 右外し: ${rightCount}`
+    );
+    // 距離別のサマリ
+    const distSums = { lt1: [], "1to2": [], "2to3": [], "3plus": [] };
+    putterShots.forEach((s) => {
+      if (s.puttDistance == null) return;
+      const d = s.puttDistance;
+      const result = s.puttResult;
+      const ok = result === "in" || result === "ok";
+      if (d < 1) distSums.lt1.push(ok);
+      else if (d < 2) distSums["1to2"].push(ok);
+      else if (d < 3) distSums["2to3"].push(ok);
+      else distSums["3plus"].push(ok);
+    });
+    const fmtDist = (arr) =>
+      arr.length
+        ? `${arr.filter(Boolean).length}/${arr.length}（${Math.round(
+            (arr.filter(Boolean).length / arr.length) * 100
+          )}%）`
+        : "—";
+    lines.push("");
+    lines.push("### 距離別の成功率（IN+OK圏内）");
+    lines.push(`- 〜1m: ${fmtDist(distSums.lt1)}`);
+    lines.push(`- 1-2m: ${fmtDist(distSums["1to2"])}`);
+    lines.push(`- 2-3m: ${fmtDist(distSums["2to3"])}`);
+    lines.push(`- 3m以上: ${fmtDist(distSums["3plus"])}`);
+  }
+
   return lines.join("\n");
 }
 
@@ -1541,6 +1594,91 @@ function buildIssueAnalysisPrompt(state) {
       );
     });
     lines.push("");
+  }
+
+  // v2.5: パッティングパフォーマンス（累積）
+  const putterStats = computePutterStats(state);
+  if (putterStats && putterStats.n > 0) {
+    lines.push(`## パッティングパフォーマンス（n=${putterStats.n}）`);
+    lines.push("");
+    lines.push(`- 18H平均パット数: ${putterStats.avgPuttsPer18 ?? "—"}`);
+    lines.push(
+      `- カップイン率（全体）: ${
+        putterStats.n
+          ? Math.round((putterStats.resultCounts.in / putterStats.n) * 100)
+          : "—"
+      }%`
+    );
+    lines.push(
+      `- OK圏内含む成功率: ${
+        putterStats.n
+          ? Math.round(
+              ((putterStats.resultCounts.in + putterStats.resultCounts.ok) /
+                putterStats.n) *
+                100
+            )
+          : "—"
+      }%`
+    );
+    lines.push("");
+    // 距離別
+    const distRows = putterStats.byDistance.filter((b) => b.n > 0);
+    if (distRows.length > 0) {
+      lines.push("### 距離別の成功率");
+      lines.push("| 距離 | n | IN率 | OK率 |");
+      lines.push("|---|---|---|---|");
+      distRows.forEach((b) => {
+        lines.push(
+          `| ${b.label} | ${b.n} | ${b.inRate ?? "—"}% | ${b.okRate ?? "—"}% |`
+        );
+      });
+      lines.push("");
+    }
+    // 傾斜・曲がり別
+    const slopeRows = putterStats.bySlope.filter((s) => s.n > 0);
+    if (slopeRows.length > 0) {
+      lines.push("### 傾斜別の成功率");
+      lines.push("| 傾斜 | n | IN率 | OK率 |");
+      lines.push("|---|---|---|---|");
+      slopeRows.forEach((s) => {
+        lines.push(
+          `| ${s.label} | ${s.n} | ${s.inRate ?? "—"}% | ${s.okRate ?? "—"}% |`
+        );
+      });
+      lines.push("");
+    }
+    const curveRows = putterStats.byCurve.filter((s) => s.n > 0);
+    if (curveRows.length > 0) {
+      lines.push("### 曲がり別の成功率");
+      lines.push("| 曲がり | n | IN率 | OK率 |");
+      lines.push("|---|---|---|---|");
+      curveRows.forEach((s) => {
+        lines.push(
+          `| ${s.label} | ${s.n} | ${s.inRate ?? "—"}% | ${s.okRate ?? "—"}% |`
+        );
+      });
+      lines.push("");
+    }
+    // 結果分布
+    const RES = {
+      in: "🎯 IN",
+      ok: "OK圏内",
+      short: "ショート",
+      over: "オーバー",
+      left: "左外し",
+      right: "右外し",
+    };
+    const resEntries = Object.entries(putterStats.resultCounts).filter(
+      ([, v]) => v > 0
+    );
+    if (resEntries.length > 0) {
+      lines.push("### 結果の分布");
+      resEntries.forEach(([k, v]) => {
+        const pct = Math.round((v / putterStats.n) * 100);
+        lines.push(`- ${RES[k] || k}: ${v}回 (${pct}%)`);
+      });
+      lines.push("");
+    }
   }
 
   // v2.1: 打感（ダフリ・トップ・シャンク）の傾向
@@ -1704,6 +1842,77 @@ function buildClubDistancePrompt(state) {
           s.min != null ? `${s.min}-${s.max}` : "—"
         } | ${cupinRate} | ${accuracy} | ${tendency} | ${s.n} |`
       );
+    });
+  }
+
+  // v2.5: パター統計（パッティング全体の傾向）
+  const putterStats = computePutterStats(state);
+  if (putterStats && putterStats.n > 0) {
+    lines.push("");
+    lines.push(`## パッティング（n=${putterStats.n}、対象 ${putterStats.totalRounds}ラウンド）`);
+    lines.push("");
+    lines.push(`- 18H平均パット数: ${putterStats.avgPuttsPer18 ?? "—"}`);
+    lines.push(
+      `- カップイン率（全体）: ${
+        putterStats.n
+          ? Math.round((putterStats.resultCounts.in / putterStats.n) * 100)
+          : "—"
+      }%`
+    );
+    lines.push("");
+    lines.push("### 距離別の成功率");
+    lines.push("| 距離 | n | IN率 | OK率（IN+OK圏内） |");
+    lines.push("|---|---|---|---|");
+    putterStats.byDistance.forEach((b) => {
+      if (b.n > 0) {
+        lines.push(
+          `| ${b.label} | ${b.n} | ${b.inRate ?? "—"}% | ${b.okRate ?? "—"}% |`
+        );
+      }
+    });
+    // 傾斜・曲がり別はサンプル数がある時のみ
+    if (putterStats.bySlope.some((s) => s.n > 0)) {
+      lines.push("");
+      lines.push("### 傾斜別の成功率");
+      lines.push("| 傾斜 | n | IN率 | OK率 |");
+      lines.push("|---|---|---|---|");
+      putterStats.bySlope.forEach((s) => {
+        if (s.n > 0) {
+          lines.push(
+            `| ${s.label} | ${s.n} | ${s.inRate ?? "—"}% | ${s.okRate ?? "—"}% |`
+          );
+        }
+      });
+    }
+    if (putterStats.byCurve.some((s) => s.n > 0)) {
+      lines.push("");
+      lines.push("### 曲がり別の成功率");
+      lines.push("| 曲がり | n | IN率 | OK率 |");
+      lines.push("|---|---|---|---|");
+      putterStats.byCurve.forEach((s) => {
+        if (s.n > 0) {
+          lines.push(
+            `| ${s.label} | ${s.n} | ${s.inRate ?? "—"}% | ${s.okRate ?? "—"}% |`
+          );
+        }
+      });
+    }
+    // 結果分布
+    lines.push("");
+    lines.push("### 結果の分布");
+    const RES = {
+      in: "🎯 IN",
+      ok: "OK圏内",
+      short: "ショート",
+      over: "オーバー",
+      left: "左外し",
+      right: "右外し",
+    };
+    Object.entries(putterStats.resultCounts).forEach(([k, v]) => {
+      if (v > 0) {
+        const pct = Math.round((v / putterStats.n) * 100);
+        lines.push(`- ${RES[k] || k}: ${v}回 (${pct}%)`);
+      }
     });
   }
 
@@ -2336,21 +2545,35 @@ function HomeView({
     if (!editingRound) return;
     setState((s) => ({
       ...s,
-      rounds: s.rounds.map((r) =>
-        r.id === editingRound.id
-          ? {
-              ...r,
-              date: updates.date,
-              venue: updates.venue,
-              frontCourse: updates.frontCourse,
-              backCourse: updates.backCourse,
-              course: updates.course,
-              tee: updates.tee,
-              weather: updates.weather,
-              // holes（ショット・スコア）はそのまま維持
-            }
-          : r
-      ),
+      rounds: s.rounds.map((r) => {
+        if (r.id !== editingRound.id) return r;
+        // v2.5: コース変更時は holes の par/distance を新しいデータに更新（shots/score は維持）
+        let newHoles = r.holes;
+        if (updates.combinedHoles && Array.isArray(updates.combinedHoles)) {
+          newHoles = r.holes.map((h, i) => {
+            const newPar = updates.combinedHoles[i]?.par;
+            const newDist = updates.combinedHoles[i]?.distance;
+            return {
+              ...h,
+              ...(newPar != null ? { par: newPar } : {}),
+              distance:
+                newDist != null ? newDist : h.distance,
+              // shots, manualScore, manualPutts などはそのまま
+            };
+          });
+        }
+        return {
+          ...r,
+          date: updates.date,
+          venue: updates.venue,
+          frontCourse: updates.frontCourse,
+          backCourse: updates.backCourse,
+          course: updates.course,
+          tee: updates.tee,
+          weather: updates.weather,
+          holes: newHoles,
+        };
+      }),
     }));
     const targetId = editingRound.id;
     setEditingRound(null);
@@ -2746,24 +2969,9 @@ function NewRoundSheet({ courseMasters, onCancel, onStart, existing }) {
         ? venue + " [" + frontCourse + "]"
         : venue;
 
-    // 編集モード: メタ情報のみ送信（combinedHoles は更新しない）
-    if (isEdit) {
-      onStart({
-        date,
-        venue: venue.trim(),
-        frontCourse: frontCourse.trim(),
-        backCourse: backCourse.trim(),
-        course: courseLabel,
-        tee: tee || null,
-        weather,
-      });
-      return;
-    }
-
-    // 新規モード: combinedHoles を作って送信
+    // ホール情報を生成（コース・ティーから）
     const frontHoles = frontMaster?.holes || [];
     const backHoles = backMaster?.holes || [];
-
     const combinedHoles = Array.from({ length: 18 }, (_, i) => {
       if (i < 9) {
         const h = frontHoles[i];
@@ -2778,6 +2986,33 @@ function NewRoundSheet({ courseMasters, onCancel, onStart, existing }) {
       }
     });
 
+    // 編集モード
+    if (isEdit) {
+      // v2.5: コース・ティーが変わった時は combinedHoles も送る（ホール情報更新）
+      const courseChanged =
+        existing.frontCourse !== frontCourse.trim() ||
+        existing.backCourse !== backCourse.trim() ||
+        existing.venue !== venue.trim() ||
+        existing.tee !== (tee || null);
+      // マスタが見つかった = 距離・Par データがある場合のみホール更新の意味がある
+      const hasMasterData = !!frontMaster || !!backMaster;
+      const shouldUpdateHoles = courseChanged && hasMasterData;
+
+      onStart({
+        date,
+        venue: venue.trim(),
+        frontCourse: frontCourse.trim(),
+        backCourse: backCourse.trim(),
+        course: courseLabel,
+        tee: tee || null,
+        weather,
+        // コース変更時のみ combinedHoles を送る
+        ...(shouldUpdateHoles ? { combinedHoles } : {}),
+      });
+      return;
+    }
+
+    // 新規モード: combinedHoles を作って送信
     onStart({
       date,
       venue: venue.trim(),
@@ -7379,21 +7614,34 @@ function RoundDetailView({ roundId, state, setState, onBack }) {
     if (!round || !setState) return;
     setState((s) => ({
       ...s,
-      rounds: s.rounds.map((r) =>
-        r.id === round.id
-          ? {
-              ...r,
-              date: updates.date,
-              venue: updates.venue,
-              frontCourse: updates.frontCourse,
-              backCourse: updates.backCourse,
-              course: updates.course,
-              tee: updates.tee,
-              weather: updates.weather,
-              // holes（ショット・スコア）はそのまま維持
-            }
-          : r
-      ),
+      rounds: s.rounds.map((r) => {
+        if (r.id !== round.id) return r;
+        // v2.5: コース変更時は holes の par/distance を新しいデータに更新（shots/score は維持）
+        let newHoles = r.holes;
+        if (updates.combinedHoles && Array.isArray(updates.combinedHoles)) {
+          newHoles = r.holes.map((h, i) => {
+            const newPar = updates.combinedHoles[i]?.par;
+            const newDist = updates.combinedHoles[i]?.distance;
+            return {
+              ...h,
+              ...(newPar != null ? { par: newPar } : {}),
+              distance:
+                newDist != null ? newDist : h.distance,
+            };
+          });
+        }
+        return {
+          ...r,
+          date: updates.date,
+          venue: updates.venue,
+          frontCourse: updates.frontCourse,
+          backCourse: updates.backCourse,
+          course: updates.course,
+          tee: updates.tee,
+          weather: updates.weather,
+          holes: newHoles,
+        };
+      }),
     }));
     setEditingRound(false);
   };
