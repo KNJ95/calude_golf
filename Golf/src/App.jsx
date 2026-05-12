@@ -1455,14 +1455,21 @@ function buildRoundReviewPrompt(round, clubs, unit) {
     lines.push(
       `- カップイン: ${inCount} / OK圏内: ${okCount} / ショート: ${shortCount} / オーバー: ${overCount} / 左外し: ${leftCount} / 右外し: ${rightCount}`
     );
-    // 距離別のサマリ
-    const distSums = { lt1: [], "1to2": [], "2to3": [], "3plus": [] };
+    // 距離別のサマリ（v2.5: 0.5m を境界に細分化）
+    const distSums = {
+      lt05: [],
+      "05to1": [],
+      "1to2": [],
+      "2to3": [],
+      "3plus": [],
+    };
     putterShots.forEach((s) => {
       if (s.puttDistance == null) return;
       const d = s.puttDistance;
       const result = s.puttResult;
       const ok = result === "in" || result === "ok";
-      if (d < 1) distSums.lt1.push(ok);
+      if (d < 0.5) distSums.lt05.push(ok);
+      else if (d < 1) distSums["05to1"].push(ok);
       else if (d < 2) distSums["1to2"].push(ok);
       else if (d < 3) distSums["2to3"].push(ok);
       else distSums["3plus"].push(ok);
@@ -1475,7 +1482,8 @@ function buildRoundReviewPrompt(round, clubs, unit) {
         : "—";
     lines.push("");
     lines.push("### 距離別の成功率（IN+OK圏内）");
-    lines.push(`- 〜1m: ${fmtDist(distSums.lt1)}`);
+    lines.push(`- 〜0.5m: ${fmtDist(distSums.lt05)}`);
+    lines.push(`- 0.5-1m: ${fmtDist(distSums["05to1"])}`);
     lines.push(`- 1-2m: ${fmtDist(distSums["1to2"])}`);
     lines.push(`- 2-3m: ${fmtDist(distSums["2to3"])}`);
     lines.push(`- 3m以上: ${fmtDist(distSums["3plus"])}`);
@@ -2103,8 +2111,11 @@ function computePutterStats(state) {
   }
 
   // 距離レンジ別の成功率（INまたはOK圏内）
+  // 距離レンジ別の成功率（INまたはOK圏内）
+  // v2.5: 0.5m を境界に細分化
   const distanceBuckets = [
-    { id: "lt1", label: "〜1m", min: 0, max: 1 },
+    { id: "lt05", label: "〜0.5m", min: 0, max: 0.5 },
+    { id: "05-1", label: "0.5-1m", min: 0.5, max: 1 },
     { id: "1-2", label: "1-2m", min: 1, max: 2 },
     { id: "2-3", label: "2-3m", min: 2, max: 3 },
     { id: "3-5", label: "3-5m", min: 3, max: 5 },
@@ -6215,7 +6226,7 @@ function ShotEditor({
                 <span className="distance-unit-large">m</span>
               </div>
               <div className="putt-distance-shortcuts">
-                {[1, 2, 3, 5, 7, 10].map((m) => (
+                {[0.5, 1, 2, 3, 5, 7, 10].map((m) => (
                   <button
                     key={m}
                     type="button"
