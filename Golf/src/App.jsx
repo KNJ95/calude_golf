@@ -1108,6 +1108,19 @@ const OUTCOME_LABELS = {
 };
 const DIR_LABELS = { left: "左", straight: "直", right: "右" };
 const DEPTH_LABELS = { short: "ショート", pin: "ピン", over: "オーバー" };
+// v2.5: 球筋（通常クラブ用、任意）
+const BALL_FLIGHT_LABELS = {
+  fade: "フェード",
+  draw: "ドロー",
+  slice: "スライス",
+  hook: "フック",
+};
+const BALL_FLIGHTS = [
+  { id: "fade", label: "フェード", desc: "右に軽く曲がる", tone: "good" },
+  { id: "draw", label: "ドロー", desc: "左に軽く曲がる", tone: "good" },
+  { id: "slice", label: "スライス", desc: "右に大きく曲がる", tone: "miss" },
+  { id: "hook", label: "フック", desc: "左に大きく曲がる", tone: "miss" },
+];
 // v2.1: 打感（任意）
 const CONTACT_LABELS = {
   nice: "ナイス",
@@ -1138,6 +1151,20 @@ const MISS_TYPES = [
   { id: "hook", label: "フック" },
   { id: "slice", label: "スライス" },
   { id: "chii_ping", label: "チーピン" },
+];
+
+// v2.6: 球筋（通常クラブのみ、任意・単一選択）
+const BALL_FLIGHT_LABELS = {
+  fade: "フェード",
+  draw: "ドロー",
+  slice: "スライス",
+  hook: "フック",
+};
+const BALL_FLIGHTS = [
+  { id: "fade", label: "↗ フェード", tone: "good" }, // 右に軽く曲がる（右打ち）
+  { id: "draw", label: "↖ ドロー", tone: "good" }, // 左に軽く曲がる
+  { id: "slice", label: "→→ スライス", tone: "miss" }, // 右に大きく曲がる
+  { id: "hook", label: "←← フック", tone: "miss" }, // 左に大きく曲がる
 ];
 
 
@@ -1201,9 +1228,9 @@ function buildRoundReviewPrompt(round, clubs, unit) {
   lines.push("## 全ショット一覧");
   lines.push("");
   lines.push(
-    "| ホール | Par | # | クラブ | 距離 | 打点 | 着地 | 方向 | 距離感 | 自己評価 | 打感 | 結果 | 平均除外 | メモ |"
+    "| ホール | Par | # | クラブ | 距離 | 打点 | 着地 | 方向 | 球筋 | 距離感 | 自己評価 | 打感 | 結果 | 平均除外 | メモ |"
   );
-  lines.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+  lines.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
   round.holes.forEach((h) => {
     h.shots.forEach((s, i) => {
       const club = clubMap[s.clubId]?.name || "—";
@@ -1260,6 +1287,7 @@ function buildRoundReviewPrompt(round, clubs, unit) {
         LIE_LABELS[s.lie] || "—",
         LIE_LABELS[s.nextLie] || "—",
         DIR_LABELS[s.direction] || "—",
+        s.ballFlight ? BALL_FLIGHT_LABELS[s.ballFlight] : "—",
         DEPTH_LABELS[s.depth] || "—",
         sr ? SELF_RATING_LABELS[sr] : "—",
         s.contact ? CONTACT_LABELS[s.contact] : "—",
@@ -1311,6 +1339,18 @@ function buildRoundReviewPrompt(round, clubs, unit) {
       const counts = { short: 0, pin: 0, over: 0 };
       depths.forEach((s) => counts[s.depth]++);
       parts.push(`距離感 短${counts.short}/ピン${counts.pin}/長${counts.over}`);
+    }
+    // v2.5: 球筋集計
+    const flights = shots.filter((s) => s.ballFlight);
+    if (flights.length) {
+      const counts = { fade: 0, draw: 0, slice: 0, hook: 0 };
+      flights.forEach((s) => counts[s.ballFlight]++);
+      const parts2 = [];
+      if (counts.fade) parts2.push(`フェード${counts.fade}`);
+      if (counts.draw) parts2.push(`ドロー${counts.draw}`);
+      if (counts.slice) parts2.push(`スライス${counts.slice}`);
+      if (counts.hook) parts2.push(`フック${counts.hook}`);
+      if (parts2.length) parts.push(`球筋 ${parts2.join("/")}`);
     }
     parts.push(`ミス率${Math.round((miss / shots.length) * 100)}%`);
     lines.push(`- **${c.name}**: ${parts.join(" / ")}`);
@@ -1570,6 +1610,28 @@ function buildIssueAnalysisPrompt(state) {
     lines.push("");
   }
 
+  // v2.5: 球筋の傾向
+  const issueFlightClubs = clubStats.filter(
+    (s) => s.ballFlight && s.ballFlight.n > 0
+  );
+  if (issueFlightClubs.length > 0) {
+    lines.push("## 球筋の傾向");
+    lines.push("");
+    lines.push(
+      "| クラブ | フェード | ドロー | スライス | フック | n |"
+    );
+    lines.push("|---|---|---|---|---|---|");
+    issueFlightClubs.forEach((s) => {
+      const bf = s.ballFlight;
+      const pct = (count) =>
+        bf.n ? Math.round((count / bf.n) * 100) + "%" : "—";
+      lines.push(
+        `| ${s.club.name} | ${pct(bf.fade)} | ${pct(bf.draw)} | ${pct(bf.slice)} | ${pct(bf.hook)} | ${bf.n} |`
+      );
+    });
+    lines.push("");
+  }
+
   // v2.1: ウェッジパフォーマンス（コントロールショット、累積）
   const wedgeStats = computeWedgeStats(state).filter((s) => s.n > 0);
   if (wedgeStats.length > 0) {
@@ -1821,6 +1883,28 @@ function buildClubDistancePrompt(state) {
     );
   });
 
+  // v2.5: 球筋傾向（DR/W/UT/I のうち、球筋データがあるクラブ）
+  const flightClubs = used.filter(
+    (s) => s.ballFlight && s.ballFlight.n > 0
+  );
+  if (flightClubs.length > 0) {
+    lines.push("");
+    lines.push("## 球筋の傾向");
+    lines.push("");
+    lines.push(
+      "| クラブ | フェード | ドロー | スライス | フック | n |"
+    );
+    lines.push("|---|---|---|---|---|---|");
+    flightClubs.forEach((s) => {
+      const bf = s.ballFlight;
+      const pct = (count) =>
+        bf.n ? Math.round((count / bf.n) * 100) + "%" : "—";
+      lines.push(
+        `| ${s.club.name} | ${pct(bf.fade)} | ${pct(bf.draw)} | ${pct(bf.slice)} | ${pct(bf.hook)} | ${bf.n} |`
+      );
+    });
+  }
+
   // v2.1: ウェッジ（コントロールショット）の距離感
   const wedgeStats = computeWedgeStats(state).filter((s) => s.n > 0);
   if (wedgeStats.length > 0) {
@@ -1971,6 +2055,15 @@ function computeClubStats(state) {
       over: depthShots.filter((s) => s.depth === "over").length,
       n: depthShots.length,
     };
+    // v2.5: 球筋分布
+    const flightShots = data.shots.filter((s) => s.ballFlight);
+    const ballFlight = {
+      fade: flightShots.filter((s) => s.ballFlight === "fade").length,
+      draw: flightShots.filter((s) => s.ballFlight === "draw").length,
+      slice: flightShots.filter((s) => s.ballFlight === "slice").length,
+      hook: flightShots.filter((s) => s.ballFlight === "hook").length,
+      n: flightShots.length,
+    };
     return {
       club: c,
       n: data.shots.length,
@@ -1992,6 +2085,7 @@ function computeClubStats(state) {
         : null,
       dir,
       depth,
+      ballFlight, // v2.5
     };
   });
 }
@@ -4078,6 +4172,17 @@ function ShotRowInner({ index, shot, clubs, unit, onClick }) {
               {MISS_TYPE_LABELS[mt] || mt}
             </span>
           ))}
+        {shot.ballFlight && (
+          <span
+            className={`tag tag-ball-flight tone-${
+              shot.ballFlight === "fade" || shot.ballFlight === "draw"
+                ? "good"
+                : "miss"
+            }`}
+          >
+            {BALL_FLIGHT_LABELS[shot.ballFlight]}
+          </span>
+        )}
         {dirLabel && <span className="tag tag-dir">{dirLabel}</span>}
         {depthLabel && <span className="tag tag-depth">{depthLabel}</span>}
         {shot.contact && shot.contact !== "nice" && (
@@ -4310,6 +4415,34 @@ function ChatChoiceButtons({
     );
   }
 
+  // v2.5: 球筋
+  if (askingKey === "ballFlight") {
+    const opts = [
+      { id: "fade", label: "フェード", tone: "good" },
+      { id: "draw", label: "ドロー", tone: "good" },
+      { id: "slice", label: "スライス", tone: "miss" },
+      { id: "hook", label: "フック", tone: "miss" },
+    ];
+    return (
+      <>
+        <div className="chat-choices-grid two-cols">
+          {opts.map((o) => (
+            <button
+              key={o.id}
+              className={`chat-choice-btn tone-${o.tone}`}
+              onClick={() => onChoose("ballFlight", o.id, o.label)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <button className="chat-skip-inline" onClick={onSkip}>
+          ⏭ スキップ
+        </button>
+      </>
+    );
+  }
+
   // 自己評価
   if (askingKey === "selfRating") {
     const opts = [
@@ -4450,6 +4583,8 @@ function ShotEditor({
   const [nextLie, setNextLie] = useState(existing?.nextLie || "fw");
   const [direction, setDirection] = useState(existing?.direction || null);
   const [depth, setDepth] = useState(existing?.depth || null);
+  // v2.5: 球筋（フェード/ドロー/スライス/フック、任意）
+  const [ballFlight, setBallFlight] = useState(existing?.ballFlight || null);
   // v2.0: 結果を自己評価と結果に分離
   const [selfRating, setSelfRating] = useState(
     existing ? getShotSelfRating(existing) : null
@@ -4468,6 +4603,8 @@ function ShotEditor({
   const [missTypes, setMissTypes] = useState(
     Array.isArray(existing?.missTypes) ? existing.missTypes : []
   );
+  // v2.6: 球筋（通常クラブ・任意・単一選択）
+  const [ballFlight, setBallFlight] = useState(existing?.ballFlight || null);
   const [memo, setMemo] = useState(existing?.memo || "");
 
   // v2.1: パター専用 state
@@ -4907,6 +5044,7 @@ function ShotEditor({
       nextLie: overrides.nextLie !== undefined ? overrides.nextLie : nextLie,
       direction: overrides.direction !== undefined ? overrides.direction : direction,
       depth: overrides.depth !== undefined ? overrides.depth : depth,
+      ballFlight: overrides.ballFlight !== undefined ? overrides.ballFlight : ballFlight,
       selfRating: overrides.selfRating !== undefined ? overrides.selfRating : selfRating,
       contact: overrides.contact !== undefined ? overrides.contact : contact,
       wedgeTargetDistance: overrides.wedgeTargetDistance !== undefined
@@ -5015,6 +5153,13 @@ function ShotEditor({
         missing.push({
           key: "depth",
           question: "🤖 距離感は？（ショート/ピン/オーバー・スキップ可）",
+          required: false,
+        });
+      }
+      if (!v.ballFlight) {
+        missing.push({
+          key: "ballFlight",
+          question: "🤖 球筋は？（フェード/ドロー/スライス/フック・スキップ可）",
           required: false,
         });
       }
@@ -5617,6 +5762,7 @@ function ShotEditor({
           excludeFromAvg: excludeFromAvgShot,
           isMiss, // v2.5
           missTypes, // v2.5
+          ballFlight, // v2.5: 球筋
           memo,
         };
       }
@@ -6149,6 +6295,28 @@ function ShotEditor({
           </div>
         </div>
 
+        {/* v2.5: 球筋（任意・通常クラブ専用） */}
+        <div className="editor-section">
+          <div className="editor-label">球筋（任意）</div>
+          <div className="ball-flight-row">
+            {BALL_FLIGHTS.map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                className={`ball-flight-btn tone-${b.tone} ${
+                  ballFlight === b.id ? "on" : ""
+                }`}
+                onClick={() =>
+                  setBallFlight(ballFlight === b.id ? null : b.id)
+                }
+                title={b.desc}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="editor-section">
           <div className="editor-label">打感（任意）</div>
           <div className="contact-row">
@@ -6636,6 +6804,7 @@ function ShotEditor({
                         excludeFromAvg: excludeFromAvgShot,
                         isMiss, // v2.5
                         missTypes, // v2.5
+                        ballFlight, // v2.5: 球筋
                         memo,
                       }
                 )
@@ -7445,6 +7614,39 @@ function ClubDetailView({ clubId, state, onBack }) {
                   title={`${seg.label}: ${count}回 (${Math.round(pct)}%)`}
                 >
                   {pct > 12 ? `${seg.label} ${Math.round(pct)}%` : ""}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* v2.5: 球筋の傾向 */}
+      {clubStats.ballFlight && clubStats.ballFlight.n > 0 && (
+        <div className="section">
+          <div className="section-head">
+            <div className="section-title">
+              球筋の傾向（{clubStats.ballFlight.n}回）
+            </div>
+          </div>
+          <div className="cd-segment-bar">
+            {[
+              { key: "fade", label: "フェード", tone: "good" },
+              { key: "draw", label: "ドロー", tone: "good" },
+              { key: "slice", label: "スライス", tone: "miss" },
+              { key: "hook", label: "フック", tone: "miss" },
+            ].map((seg) => {
+              const count = clubStats.ballFlight[seg.key] || 0;
+              if (count === 0) return null;
+              const pct = (count / clubStats.ballFlight.n) * 100;
+              return (
+                <div
+                  key={seg.key}
+                  className={`cd-segment tone-${seg.tone}`}
+                  style={{ width: `${pct}%` }}
+                  title={`${seg.label}: ${count}回 (${Math.round(pct)}%)`}
+                >
+                  {pct > 14 ? `${seg.label} ${Math.round(pct)}%` : ""}
                 </div>
               );
             })}
@@ -9954,6 +10156,19 @@ function Style() {
         font-weight: 600;
       }
 
+      /* v2.6: 球筋タグ */
+      .tag-ball-flight {
+        font-weight: 700;
+      }
+      .tag-ball-flight.tone-good {
+        background: rgba(182, 242, 74, 0.18);
+        color: var(--green);
+      }
+      .tag-ball-flight.tone-miss {
+        background: rgba(255, 184, 77, 0.22);
+        color: var(--amber);
+      }
+
       /* v2.5: 必須バッジ */
       .required-badge {
         display: inline-block;
@@ -10842,6 +11057,35 @@ function Style() {
         background: var(--amber, #ffb84d);
         color: #0a0a0a;
         border-color: var(--amber, #ffb84d);
+      }
+
+      /* v2.6: 球筋ボタン */
+      .ball-flight-row {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+      }
+      .ball-flight-btn {
+        padding: 12px 8px;
+        background: var(--bg-2);
+        border: 1px solid var(--border-soft);
+        border-radius: 10px;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text-dim);
+        text-align: center;
+        cursor: pointer;
+      }
+      .ball-flight-btn:active { transform: scale(0.97); }
+      .ball-flight-btn.on.tone-good {
+        background: rgba(182, 242, 74, 0.2);
+        border-color: var(--green);
+        color: var(--green);
+      }
+      .ball-flight-btn.on.tone-miss {
+        background: rgba(255, 184, 77, 0.2);
+        border-color: var(--amber, #ffb84d);
+        color: var(--amber, #ffb84d);
       }
 
       /* v2.0: 結果（事実）ボタン */
