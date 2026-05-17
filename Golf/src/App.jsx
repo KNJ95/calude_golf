@@ -1148,12 +1148,16 @@ const BALL_FLIGHT_LABELS = {
   slice: "スライス",
   hook: "フック",
 };
+// 配置：
+// [ドロー][フェード]   ← 意図的な曲げ（左/右）
+// [フック][スライス]   ← 意図しないミス（左/右）
+//     [ストレート]      ← 真っ直ぐ（中央、下）
 const BALL_FLIGHTS = [
-  { id: "straight", label: "↑ ストレート", tone: "good" }, // 真っ直ぐ
-  { id: "fade", label: "↗ フェード", tone: "good" }, // 右に軽く曲がる（右打ち）
-  { id: "draw", label: "↖ ドロー", tone: "good" }, // 左に軽く曲がる
-  { id: "slice", label: "→→ スライス", tone: "miss" }, // 右に大きく曲がる
-  { id: "hook", label: "←← フック", tone: "miss" }, // 左に大きく曲がる
+  { id: "draw", label: "↖ ドロー", tone: "good" },
+  { id: "fade", label: "↗ フェード", tone: "good" },
+  { id: "hook", label: "←← フック", tone: "miss" },
+  { id: "slice", label: "→→ スライス", tone: "miss" },
+  { id: "straight", label: "↑ ストレート", tone: "good", center: true },
 ];
 
 
@@ -6473,11 +6477,27 @@ function ShotEditor({
           </div>
         </div>
 
-        {/* v2.5: 球筋（任意・通常クラブ専用） */}
+        {/* v2.6: 球筋（任意・通常クラブ専用） */}
         <div className="editor-section">
           <div className="editor-label">球筋（任意）</div>
           <div className="ball-flight-row">
-            {BALL_FLIGHTS.map((b) => (
+            {BALL_FLIGHTS.filter((b) => !b.center).map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                className={`ball-flight-btn tone-${b.tone} ${
+                  ballFlight === b.id ? "on" : ""
+                }`}
+                onClick={() =>
+                  setBallFlight(ballFlight === b.id ? null : b.id)
+                }
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+          <div className="ball-flight-row-center">
+            {BALL_FLIGHTS.filter((b) => b.center).map((b) => (
               <button
                 key={b.id}
                 type="button"
@@ -11242,6 +11262,15 @@ function Style() {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
         gap: 6px;
+      }
+      /* v2.6: ストレート単独行（中央に幅50%） */
+      .ball-flight-row-center {
+        display: flex;
+        justify-content: center;
+        margin-top: 6px;
+      }
+      .ball-flight-row-center .ball-flight-btn {
+        width: calc(50% - 3px);
       }
       .ball-flight-btn {
         padding: 12px 8px;
