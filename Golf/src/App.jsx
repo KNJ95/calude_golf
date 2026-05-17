@@ -1598,7 +1598,7 @@ function buildIssueAnalysisPrompt(state) {
   }
 
   // v2.5: 球筋の傾向
-  const issueFlightClubs = clubStats.filter(
+  const issueFlightClubs = used.filter(
     (s) => s.ballFlight && s.ballFlight.n > 0
   );
   if (issueFlightClubs.length > 0) {
