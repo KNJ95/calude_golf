@@ -5666,5 +5666,213 @@
         "distance": 375
       }
     ]
+  },
+  {
+    "venue": "ウィンザー・グレートピーク・オブ・トーヤ",
+    "course": "OUT",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 536
+      },
+      {
+        "number": 2,
+        "par": 3,
+        "distance": 188
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 385
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 180
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 385
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 288
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 409
+      },
+      {
+        "number": 8,
+        "par": 5,
+        "distance": 510
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 255
+      }
+    ]
+  },
+  {
+    "venue": "ウィンザー・グレートピーク・オブ・トーヤ",
+    "course": "OUT",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 5,
+        "distance": 514
+      },
+      {
+        "number": 2,
+        "par": 3,
+        "distance": 172
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 366
+      },
+      {
+        "number": 4,
+        "par": 3,
+        "distance": 172
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 350
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 275
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 372
+      },
+      {
+        "number": 8,
+        "par": 5,
+        "distance": 489
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 255
+      }
+    ]
+  },
+  {
+    "venue": "ウィンザー・グレートピーク・オブ・トーヤ",
+    "course": "IN",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 10,
+        "par": 4,
+        "distance": 400
+      },
+      {
+        "number": 11,
+        "par": 4,
+        "distance": 360
+      },
+      {
+        "number": 12,
+        "par": 5,
+        "distance": 480
+      },
+      {
+        "number": 13,
+        "par": 3,
+        "distance": 220
+      },
+      {
+        "number": 14,
+        "par": 4,
+        "distance": 350
+      },
+      {
+        "number": 15,
+        "par": 3,
+        "distance": 160
+      },
+      {
+        "number": 16,
+        "par": 4,
+        "distance": 380
+      },
+      {
+        "number": 17,
+        "par": 4,
+        "distance": 408
+      },
+      {
+        "number": 18,
+        "par": 4,
+        "distance": 322
+      }
+    ]
+  },
+  {
+    "venue": "ウィンザー・グレートピーク・オブ・トーヤ",
+    "course": "IN",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 10,
+        "par": 4,
+        "distance": 395
+      },
+      {
+        "number": 11,
+        "par": 4,
+        "distance": 349
+      },
+      {
+        "number": 12,
+        "par": 5,
+        "distance": 473
+      },
+      {
+        "number": 13,
+        "par": 3,
+        "distance": 186
+      },
+      {
+        "number": 14,
+        "par": 4,
+        "distance": 328
+      },
+      {
+        "number": 15,
+        "par": 3,
+        "distance": 148
+      },
+      {
+        "number": 16,
+        "par": 4,
+        "distance": 352
+      },
+      {
+        "number": 17,
+        "par": 4,
+        "distance": 392
+      },
+      {
+        "number": 18,
+        "par": 4,
+        "distance": 273
+      }
+    ]
   }
 ]

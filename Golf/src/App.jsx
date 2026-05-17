@@ -4590,8 +4590,6 @@ function ShotEditor({
   const [missTypes, setMissTypes] = useState(
     Array.isArray(existing?.missTypes) ? existing.missTypes : []
   );
-  // v2.6: 球筋（通常クラブ・任意・単一選択）
-  const [ballFlight, setBallFlight] = useState(existing?.ballFlight || null);
   const [memo, setMemo] = useState(existing?.memo || "");
 
   // v2.1: パター専用 state
