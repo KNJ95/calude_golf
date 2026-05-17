@@ -1108,19 +1108,6 @@ const OUTCOME_LABELS = {
 };
 const DIR_LABELS = { left: "左", straight: "直", right: "右" };
 const DEPTH_LABELS = { short: "ショート", pin: "ピン", over: "オーバー" };
-// v2.5: 球筋（通常クラブ用、任意）
-const BALL_FLIGHT_LABELS = {
-  fade: "フェード",
-  draw: "ドロー",
-  slice: "スライス",
-  hook: "フック",
-};
-const BALL_FLIGHTS = [
-  { id: "fade", label: "フェード", desc: "右に軽く曲がる", tone: "good" },
-  { id: "draw", label: "ドロー", desc: "左に軽く曲がる", tone: "good" },
-  { id: "slice", label: "スライス", desc: "右に大きく曲がる", tone: "miss" },
-  { id: "hook", label: "フック", desc: "左に大きく曲がる", tone: "miss" },
-];
 // v2.1: 打感（任意）
 const CONTACT_LABELS = {
   nice: "ナイス",
@@ -6309,7 +6296,6 @@ function ShotEditor({
                 onClick={() =>
                   setBallFlight(ballFlight === b.id ? null : b.id)
                 }
-                title={b.desc}
               >
                 {b.label}
               </button>
