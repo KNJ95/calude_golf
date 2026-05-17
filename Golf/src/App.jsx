@@ -1142,12 +1142,14 @@ const MISS_TYPES = [
 
 // v2.6: 球筋（通常クラブのみ、任意・単一選択）
 const BALL_FLIGHT_LABELS = {
+  straight: "ストレート",
   fade: "フェード",
   draw: "ドロー",
   slice: "スライス",
   hook: "フック",
 };
 const BALL_FLIGHTS = [
+  { id: "straight", label: "↑ ストレート", tone: "good" }, // 真っ直ぐ
   { id: "fade", label: "↗ フェード", tone: "good" }, // 右に軽く曲がる（右打ち）
   { id: "draw", label: "↖ ドロー", tone: "good" }, // 左に軽く曲がる
   { id: "slice", label: "→→ スライス", tone: "miss" }, // 右に大きく曲がる
@@ -1605,18 +1607,114 @@ function buildIssueAnalysisPrompt(state) {
     lines.push("## 球筋の傾向");
     lines.push("");
     lines.push(
-      "| クラブ | フェード | ドロー | スライス | フック | n |"
+      "【分析依頼】各球筋について、以下それぞれを分析・提案してください："
     );
-    lines.push("|---|---|---|---|---|---|");
+    lines.push(
+      "- **ストレート率**：意図したストレートが打てているか、安定性の指標"
+    );
+    lines.push(
+      "- **フェード/ドロー率**：意図的な曲げが入れられているか、コントロール力"
+    );
+    lines.push(
+      "- **スライス/フック率**：意図しない大ミス、改善が必要な技術的課題"
+    );
+    lines.push(
+      "- 全体的な球筋の傾向と、各クラブごとの特徴・改善ポイント"
+    );
+    lines.push("");
+
+    // (A) クラブ別の球筋分布
+    lines.push("### クラブ別の球筋分布");
+    lines.push("");
+    lines.push(
+      "| クラブ | ストレート | フェード | ドロー | スライス | フック | n |"
+    );
+    lines.push("|---|---|---|---|---|---|---|");
     issueFlightClubs.forEach((s) => {
       const bf = s.ballFlight;
       const pct = (count) =>
         bf.n ? Math.round((count / bf.n) * 100) + "%" : "—";
       lines.push(
-        `| ${s.club.name} | ${pct(bf.fade)} | ${pct(bf.draw)} | ${pct(bf.slice)} | ${pct(bf.hook)} | ${bf.n} |`
+        `| ${s.club.name} | ${pct(bf.straight || 0)} | ${pct(bf.fade)} | ${pct(bf.draw)} | ${pct(bf.slice)} | ${pct(bf.hook)} | ${bf.n} |`
       );
     });
     lines.push("");
+
+    // (B) 球筋ごとの全体集計
+    const totalsAll = {
+      straight: 0, fade: 0, draw: 0, slice: 0, hook: 0, n: 0,
+    };
+    issueFlightClubs.forEach((s) => {
+      const bf = s.ballFlight;
+      totalsAll.straight += bf.straight || 0;
+      totalsAll.fade += bf.fade || 0;
+      totalsAll.draw += bf.draw || 0;
+      totalsAll.slice += bf.slice || 0;
+      totalsAll.hook += bf.hook || 0;
+      totalsAll.n += bf.n;
+    });
+    if (totalsAll.n > 0) {
+      lines.push("### 球筋ごとの全体傾向（全クラブ合計）");
+      lines.push("");
+      lines.push("| 球筋 | 回数 | 全体割合 | 主に出ているクラブ TOP3 |");
+      lines.push("|---|---|---|---|");
+      const flightKeys = [
+        { id: "straight", label: "ストレート" },
+        { id: "fade", label: "フェード" },
+        { id: "draw", label: "ドロー" },
+        { id: "slice", label: "スライス" },
+        { id: "hook", label: "フック" },
+      ];
+      flightKeys.forEach((fk) => {
+        const total = totalsAll[fk.id];
+        const pct = totalsAll.n > 0 ? Math.round((total / totalsAll.n) * 100) : 0;
+        // クラブごとの割合 TOP3（その球筋がそのクラブの何%か）
+        const top3 = issueFlightClubs
+          .filter((s) => (s.ballFlight[fk.id] || 0) > 0)
+          .map((s) => ({
+            name: s.club.name,
+            count: s.ballFlight[fk.id] || 0,
+            ratio: s.ballFlight.n > 0
+              ? Math.round(((s.ballFlight[fk.id] || 0) / s.ballFlight.n) * 100)
+              : 0,
+          }))
+          .sort((a, b) => b.ratio - a.ratio)
+          .slice(0, 3)
+          .map((x) => `${x.name}(${x.ratio}%)`)
+          .join(", ") || "—";
+        lines.push(`| ${fk.label} | ${total} | ${pct}% | ${top3} |`);
+      });
+      lines.push("");
+
+      // (C) 球筋別の逆テーブル（その球筋がどのクラブで何回出ているか）
+      lines.push("### 球筋別のクラブ分布（どのクラブで起こりやすいか）");
+      lines.push("");
+      flightKeys.forEach((fk) => {
+        const total = totalsAll[fk.id];
+        if (total === 0) return;
+        lines.push(`#### ${fk.label}（${total}回）`);
+        const rows = issueFlightClubs
+          .filter((s) => (s.ballFlight[fk.id] || 0) > 0)
+          .map((s) => {
+            const count = s.ballFlight[fk.id] || 0;
+            const ratioInClub =
+              s.ballFlight.n > 0
+                ? Math.round((count / s.ballFlight.n) * 100)
+                : 0;
+            const ratioOfFlight = Math.round((count / total) * 100);
+            return { name: s.club.name, count, ratioInClub, ratioOfFlight };
+          })
+          .sort((a, b) => b.count - a.count);
+        if (rows.length > 0) {
+          rows.forEach((r) => {
+            lines.push(
+              `- ${r.name}: ${r.count}回 （この球筋の${r.ratioOfFlight}% / そのクラブでは${r.ratioInClub}%）`
+            );
+          });
+        }
+        lines.push("");
+      });
+    }
   }
 
   // v2.1: ウェッジパフォーマンス（コントロールショット、累積）
@@ -1879,17 +1977,111 @@ function buildClubDistancePrompt(state) {
     lines.push("## 球筋の傾向");
     lines.push("");
     lines.push(
-      "| クラブ | フェード | ドロー | スライス | フック | n |"
+      "【分析依頼】各球筋について、以下それぞれを分析してください："
     );
-    lines.push("|---|---|---|---|---|---|");
+    lines.push(
+      "- **ストレート率**：意図したストレートが打てているか、安定性の指標"
+    );
+    lines.push(
+      "- **フェード/ドロー率**：意図的な曲げ、コントロール力"
+    );
+    lines.push(
+      "- **スライス/フック率**：意図しない大ミス、改善ポイント"
+    );
+    lines.push(
+      "- 各クラブごとの特徴と、ラウンド中の番手選択への提案"
+    );
+    lines.push("");
+
+    // (A) クラブ別
+    lines.push("### クラブ別の球筋分布");
+    lines.push("");
+    lines.push(
+      "| クラブ | ストレート | フェード | ドロー | スライス | フック | n |"
+    );
+    lines.push("|---|---|---|---|---|---|---|");
     flightClubs.forEach((s) => {
       const bf = s.ballFlight;
       const pct = (count) =>
         bf.n ? Math.round((count / bf.n) * 100) + "%" : "—";
       lines.push(
-        `| ${s.club.name} | ${pct(bf.fade)} | ${pct(bf.draw)} | ${pct(bf.slice)} | ${pct(bf.hook)} | ${bf.n} |`
+        `| ${s.club.name} | ${pct(bf.straight || 0)} | ${pct(bf.fade)} | ${pct(bf.draw)} | ${pct(bf.slice)} | ${pct(bf.hook)} | ${bf.n} |`
       );
     });
+    lines.push("");
+
+    // (B) 球筋ごとの全体集計
+    const totalsAll = {
+      straight: 0, fade: 0, draw: 0, slice: 0, hook: 0, n: 0,
+    };
+    flightClubs.forEach((s) => {
+      const bf = s.ballFlight;
+      totalsAll.straight += bf.straight || 0;
+      totalsAll.fade += bf.fade || 0;
+      totalsAll.draw += bf.draw || 0;
+      totalsAll.slice += bf.slice || 0;
+      totalsAll.hook += bf.hook || 0;
+      totalsAll.n += bf.n;
+    });
+    if (totalsAll.n > 0) {
+      lines.push("### 球筋ごとの全体傾向");
+      lines.push("");
+      lines.push("| 球筋 | 回数 | 全体割合 | 主に出ているクラブ TOP3 |");
+      lines.push("|---|---|---|---|");
+      const flightKeys = [
+        { id: "straight", label: "ストレート" },
+        { id: "fade", label: "フェード" },
+        { id: "draw", label: "ドロー" },
+        { id: "slice", label: "スライス" },
+        { id: "hook", label: "フック" },
+      ];
+      flightKeys.forEach((fk) => {
+        const total = totalsAll[fk.id];
+        const pct = totalsAll.n > 0 ? Math.round((total / totalsAll.n) * 100) : 0;
+        const top3 = flightClubs
+          .filter((s) => (s.ballFlight[fk.id] || 0) > 0)
+          .map((s) => ({
+            name: s.club.name,
+            count: s.ballFlight[fk.id] || 0,
+            ratio: s.ballFlight.n > 0
+              ? Math.round(((s.ballFlight[fk.id] || 0) / s.ballFlight.n) * 100)
+              : 0,
+          }))
+          .sort((a, b) => b.ratio - a.ratio)
+          .slice(0, 3)
+          .map((x) => `${x.name}(${x.ratio}%)`)
+          .join(", ") || "—";
+        lines.push(`| ${fk.label} | ${total} | ${pct}% | ${top3} |`);
+      });
+      lines.push("");
+
+      // (C) 球筋別の逆テーブル
+      lines.push("### 球筋別のクラブ分布");
+      lines.push("");
+      flightKeys.forEach((fk) => {
+        const total = totalsAll[fk.id];
+        if (total === 0) return;
+        lines.push(`#### ${fk.label}（${total}回）`);
+        const rows = flightClubs
+          .filter((s) => (s.ballFlight[fk.id] || 0) > 0)
+          .map((s) => {
+            const count = s.ballFlight[fk.id] || 0;
+            const ratioInClub =
+              s.ballFlight.n > 0
+                ? Math.round((count / s.ballFlight.n) * 100)
+                : 0;
+            const ratioOfFlight = Math.round((count / total) * 100);
+            return { name: s.club.name, count, ratioInClub, ratioOfFlight };
+          })
+          .sort((a, b) => b.count - a.count);
+        rows.forEach((r) => {
+          lines.push(
+            `- ${r.name}: ${r.count}回 （この球筋の${r.ratioOfFlight}% / そのクラブでは${r.ratioInClub}%）`
+          );
+        });
+        lines.push("");
+      });
+    }
   }
 
   // v2.1: ウェッジ（コントロールショット）の距離感
@@ -2042,9 +2234,10 @@ function computeClubStats(state) {
       over: depthShots.filter((s) => s.depth === "over").length,
       n: depthShots.length,
     };
-    // v2.5: 球筋分布
+    // v2.5/v2.6: 球筋分布
     const flightShots = data.shots.filter((s) => s.ballFlight);
     const ballFlight = {
+      straight: flightShots.filter((s) => s.ballFlight === "straight").length,
       fade: flightShots.filter((s) => s.ballFlight === "fade").length,
       draw: flightShots.filter((s) => s.ballFlight === "draw").length,
       slice: flightShots.filter((s) => s.ballFlight === "slice").length,
@@ -7615,6 +7808,7 @@ function ClubDetailView({ clubId, state, onBack }) {
           </div>
           <div className="cd-segment-bar">
             {[
+              { key: "straight", label: "ストレート", tone: "good" },
               { key: "fade", label: "フェード", tone: "good" },
               { key: "draw", label: "ドロー", tone: "good" },
               { key: "slice", label: "スライス", tone: "miss" },
