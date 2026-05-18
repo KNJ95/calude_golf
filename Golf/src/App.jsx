@@ -7035,6 +7035,8 @@ function AnalyticsView({ state, setState, onBack }) {
   const [selectedClubId, setSelectedClubId] = useState(null);
   // v2.1: ラウンド詳細画面の選択ラウンドID（null = リスト表示）
   const [selectedRoundId, setSelectedRoundId] = useState(null);
+  // v2.6: ラウンド分析画面の選択ラウンドID（null = リスト表示）
+  const [analysisRoundId, setAnalysisRoundId] = useState(null);
   const stats = useMemo(() => computeClubStats(state), [state]);
   // 分析対象はウェッジとパター以外のクラブのみ
   // （アプローチ・パターは性質が異なるため、距離分析・ミス率分析の対象外）
@@ -7066,6 +7068,16 @@ function AnalyticsView({ state, setState, onBack }) {
         state={state}
         setState={setState}
         onBack={() => setSelectedRoundId(null)}
+      />
+    );
+  }
+  // v2.6: ラウンド分析画面表示時
+  if (analysisRoundId) {
+    return (
+      <RoundAnalysisView
+        initialRoundId={analysisRoundId}
+        state={state}
+        onBack={() => setAnalysisRoundId(null)}
       />
     );
   }
@@ -7137,6 +7149,7 @@ function AnalyticsView({ state, setState, onBack }) {
         <RoundsTab
           state={state}
           onRoundClick={(roundId) => setSelectedRoundId(roundId)}
+          onAnalyzeRound={(roundId) => setAnalysisRoundId(roundId)}
         />
       )}
     </div>
@@ -8484,7 +8497,386 @@ function TendencyTab({ usedClubs, state }) {
   );
 }
 
-function RoundsTab({ state, onRoundClick }) {
+// ============================================================
+//  v2.6: RoundAnalysisView - ラウンド単独の詳細分析
+// ============================================================
+function RoundAnalysisView({ initialRoundId, state, onBack }) {
+  const [selectedId, setSelectedId] = useState(initialRoundId);
+  const { rounds, clubs, unit } = state;
+  const sortedRounds = useMemo(
+    () =>
+      [...rounds].sort((a, b) =>
+        (b.date || "").localeCompare(a.date || "")
+      ),
+    [rounds]
+  );
+  const round = sortedRounds.find((r) => r.id === selectedId) || sortedRounds[0];
+  const kpi = useMemo(
+    () => (round ? computeRoundKPI(round, clubs) : null),
+    [round, clubs]
+  );
+
+  // クラブ別集計（このラウンドのみ）
+  const clubAgg = useMemo(() => {
+    if (!round) return [];
+    const byClub = {};
+    round.holes.forEach((h) => {
+      (h.shots || []).forEach((s) => {
+        if (!s.clubId) return;
+        if (!byClub[s.clubId]) byClub[s.clubId] = [];
+        byClub[s.clubId].push(s);
+      });
+    });
+    return Object.entries(byClub)
+      .map(([cid, shots]) => {
+        const c = clubs.find((cc) => cc.id === cid);
+        if (!c) return null;
+        const isW = c.category === "wedge";
+        const isP = c.category === "putter";
+        // 距離（通常クラブ）
+        const dists = !isW && !isP
+          ? shots.map((s) => s.distance).filter((d) => d != null)
+          : [];
+        const avgDist = dists.length
+          ? Math.round(dists.reduce((a, b) => a + b, 0) / dists.length)
+          : null;
+        // ミス（重み付きを単純化：isMiss が true なら1）
+        const missCount = shots.filter(
+          (s) => s.isMiss || (s.selfRating && s.selfRating === "bad")
+        ).length;
+        // 球筋分布
+        const flightShots = shots.filter((s) => s.ballFlight);
+        const flight = {
+          straight: flightShots.filter((s) => s.ballFlight === "straight").length,
+          fade: flightShots.filter((s) => s.ballFlight === "fade").length,
+          draw: flightShots.filter((s) => s.ballFlight === "draw").length,
+          slice: flightShots.filter((s) => s.ballFlight === "slice").length,
+          hook: flightShots.filter((s) => s.ballFlight === "hook").length,
+          n: flightShots.length,
+        };
+        return {
+          club: c,
+          n: shots.length,
+          missCount,
+          avgDist,
+          flight,
+          isW,
+          isP,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => {
+        // カテゴリ順 wood→utility→iron→wedge→putter
+        const ord = { wood: 0, utility: 1, iron: 2, wedge: 3, putter: 4 };
+        const oa = ord[a.club.category] ?? 99;
+        const ob = ord[b.club.category] ?? 99;
+        if (oa !== ob) return oa - ob;
+        return (a.club.name || "").localeCompare(b.club.name || "");
+      });
+  }, [round, clubs]);
+
+  if (!round || !kpi) {
+    return (
+      <>
+        <div className="topbar">
+          <button className="topbar-back" onClick={onBack}>
+            ‹ 戻る
+          </button>
+          <div className="topbar-title">ラウンド分析</div>
+        </div>
+        <div className="empty-state">
+          <div className="empty-text">記録されたラウンドがありません</div>
+        </div>
+      </>
+    );
+  }
+
+  const par = round.holes.reduce((sum, h) => sum + (h.par || 0), 0);
+  const diff = kpi.totalScore - par;
+  const diffLabel = diff === 0 ? "E" : diff > 0 ? `+${diff}` : `${diff}`;
+
+  return (
+    <>
+      <div className="topbar">
+        <button className="topbar-back" onClick={onBack}>
+          ‹ 戻る
+        </button>
+        <div className="topbar-title">📊 ラウンド分析</div>
+      </div>
+
+      {/* ラウンド選択セレクター */}
+      <div className="section">
+        <div className="round-analysis-selector">
+          <label className="round-analysis-selector-label">
+            ラウンドを選択：
+          </label>
+          <select
+            className="round-analysis-select"
+            value={selectedId}
+            onChange={(e) => setSelectedId(e.target.value)}
+          >
+            {sortedRounds.map((r) => (
+              <option key={r.id} value={r.id}>
+                {fmtDate(r.date)} - {r.course || r.venue || "—"}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* スコアKPI */}
+      <div className="section">
+        <div className="section-head">
+          <div className="section-title">スコアKPI</div>
+        </div>
+        <div className="ra-kpi-hero">
+          <div className="ra-kpi-hero-score">
+            <div className="ra-kpi-hero-num">{kpi.totalScore}</div>
+            <div className="ra-kpi-hero-diff">{diffLabel}</div>
+          </div>
+          <div className="ra-kpi-hero-meta">
+            <div>Par {par}</div>
+            <div>{kpi.recordedHoles}/18 H</div>
+          </div>
+        </div>
+        <div className="ra-kpi-grid">
+          <div className="ra-kpi-cell">
+            <div className="ra-kpi-cell-label">パット数</div>
+            <div className="ra-kpi-cell-val">{kpi.putts}</div>
+          </div>
+          <div className="ra-kpi-cell">
+            <div className="ra-kpi-cell-label">平均パット</div>
+            <div className="ra-kpi-cell-val">
+              {kpi.recordedHoles
+                ? (kpi.putts / kpi.recordedHoles).toFixed(1)
+                : "—"}
+            </div>
+          </div>
+          <div className="ra-kpi-cell">
+            <div className="ra-kpi-cell-label">パーオン率</div>
+            <div className="ra-kpi-cell-val">
+              {kpi.parOnEligible
+                ? Math.round((kpi.parOn / kpi.parOnEligible) * 100) + "%"
+                : "—"}
+            </div>
+          </div>
+          <div className="ra-kpi-cell">
+            <div className="ra-kpi-cell-label">FWキープ率</div>
+            <div className="ra-kpi-cell-val">
+              {kpi.fwEligible
+                ? Math.round((kpi.fwKeep / kpi.fwEligible) * 100) + "%"
+                : "—"}
+            </div>
+          </div>
+          <div className="ra-kpi-cell">
+            <div className="ra-kpi-cell-label">3パット</div>
+            <div className="ra-kpi-cell-val">{kpi.threePutts}</div>
+          </div>
+          <div className="ra-kpi-cell">
+            <div className="ra-kpi-cell-label">OB</div>
+            <div className="ra-kpi-cell-val">{kpi.obs}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* クラブ別 */}
+      {clubAgg.length > 0 && (
+        <div className="section">
+          <div className="section-head">
+            <div className="section-title">クラブ別</div>
+          </div>
+          <div className="ra-club-list">
+            {clubAgg.map((s) => {
+              const missRate = s.n
+                ? Math.round((s.missCount / s.n) * 100)
+                : 0;
+              return (
+                <div key={s.club.id} className="ra-club-card">
+                  <div className="ra-club-card-head">
+                    <div className="ra-club-card-name">{s.club.name}</div>
+                    <div className="ra-club-card-n">
+                      <span className="club-list-n-num">{s.n}</span>
+                      <span className="club-list-n-unit">shots</span>
+                    </div>
+                  </div>
+                  <div className="ra-club-stats">
+                    {s.avgDist != null && (
+                      <div className="ra-club-stat">
+                        <div className="ra-club-stat-label">平均距離</div>
+                        <div className="ra-club-stat-val">
+                          {s.avgDist}
+                          <span className="ra-club-stat-unit">{unit}</span>
+                        </div>
+                      </div>
+                    )}
+                    {!s.isP && (
+                      <div className="ra-club-stat">
+                        <div className="ra-club-stat-label">ミス</div>
+                        <div
+                          className={`ra-club-stat-val ${
+                            missRate >= 40 ? "tone-bad" : ""
+                          }`}
+                        >
+                          {s.missCount}
+                          <span className="ra-club-stat-unit">
+                            / {missRate}%
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    {s.flight.n > 0 && (
+                      <div className="ra-club-stat ra-club-stat-wide">
+                        <div className="ra-club-stat-label">
+                          球筋 ({s.flight.n})
+                        </div>
+                        <div className="ra-flight-mini">
+                          {s.flight.straight > 0 && (
+                            <span className="ra-flight-chip tone-good">
+                              直{s.flight.straight}
+                            </span>
+                          )}
+                          {s.flight.fade > 0 && (
+                            <span className="ra-flight-chip tone-good">
+                              フェード{s.flight.fade}
+                            </span>
+                          )}
+                          {s.flight.draw > 0 && (
+                            <span className="ra-flight-chip tone-good">
+                              ドロー{s.flight.draw}
+                            </span>
+                          )}
+                          {s.flight.slice > 0 && (
+                            <span className="ra-flight-chip tone-miss">
+                              スライス{s.flight.slice}
+                            </span>
+                          )}
+                          {s.flight.hook > 0 && (
+                            <span className="ra-flight-chip tone-miss">
+                              フック{s.flight.hook}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ホール別 */}
+      <div className="section">
+        <div className="section-head">
+          <div className="section-title">ホール別</div>
+        </div>
+        <div className="ra-hole-list">
+          {round.holes.map((h, idx) => {
+            const score = getHoleScore(h);
+            if (score === 0 && (!h.shots || h.shots.length === 0)) return null;
+            const holePar = h.par || 4;
+            const holeDiff = score - holePar;
+            const diffStr =
+              holeDiff === 0
+                ? "E"
+                : holeDiff > 0
+                ? `+${holeDiff}`
+                : `${holeDiff}`;
+            const diffTone =
+              holeDiff < 0 ? "good" : holeDiff === 0 ? "ok" : holeDiff === 1 ? "amber" : "bad";
+            return (
+              <div key={idx} className="ra-hole-row">
+                <div className="ra-hole-head">
+                  <div className="ra-hole-num">H{idx + 1}</div>
+                  <div className="ra-hole-par">Par{holePar}</div>
+                  {h.distance != null && (
+                    <div className="ra-hole-dist">{h.distance}{unit}</div>
+                  )}
+                  <div className="ra-hole-score">
+                    <span className="ra-hole-score-num">{score}</span>
+                    <span className={`ra-hole-score-diff tone-${diffTone}`}>
+                      {diffStr}
+                    </span>
+                  </div>
+                </div>
+                {h.shots && h.shots.length > 0 && (
+                  <div className="ra-hole-shots">
+                    {h.shots.map((s, i) => {
+                      const c = clubs.find((cc) => cc.id === s.clubId);
+                      const isP = c?.category === "putter";
+                      const isW = c?.category === "wedge";
+                      let line = `${i + 1}. ${c?.name || "—"}`;
+                      if (isP) {
+                        if (s.puttDistance != null)
+                          line += ` ${s.puttDistance}m`;
+                        if (s.puttResult) {
+                          const labels = {
+                            in: "🎯IN",
+                            ok: "OK圏",
+                            short: "短",
+                            over: "長",
+                            left: "左",
+                            right: "右",
+                          };
+                          line += ` ${labels[s.puttResult] || s.puttResult}`;
+                        }
+                      } else if (isW) {
+                        if (s.wedgeTargetDistance != null)
+                          line += ` ${s.wedgeTargetDistance}→`;
+                        if (s.wedgeDistance != null)
+                          line += `${s.wedgeDistance}${unit}`;
+                      } else {
+                        if (s.distance != null)
+                          line += ` ${s.distance}${unit}`;
+                        if (s.nextLie) {
+                          const lieLabels = {
+                            fw: "FW",
+                            rough: "ラフ",
+                            bunker: "バンカー",
+                            green: "グリーン",
+                            pond: "池",
+                            ob: "OB",
+                            tee: "ティー",
+                          };
+                          line += ` → ${lieLabels[s.nextLie] || s.nextLie}`;
+                        }
+                      }
+                      return (
+                        <div key={i} className="ra-shot-line">
+                          <span className="ra-shot-text">{line}</span>
+                          <span className="ra-shot-tags">
+                            {s.isMiss && (
+                              <span className="ra-shot-tag tone-bad">⚠️</span>
+                            )}
+                            {s.ballFlight && (
+                              <span
+                                className={`ra-shot-tag tone-${
+                                  s.ballFlight === "slice" ||
+                                  s.ballFlight === "hook"
+                                    ? "miss"
+                                    : "good"
+                                }`}
+                              >
+                                {BALL_FLIGHT_LABELS[s.ballFlight]}
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function RoundsTab({ state, onRoundClick, onAnalyzeRound }) {
   const rounds = useMemo(
     () =>
       state.rounds
@@ -8547,55 +8939,64 @@ function RoundsTab({ state, onRoundClick }) {
         </div>
         <div className="round-kpi-list">
           {rounds.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              className="round-kpi-card"
-              onClick={() => onRoundClick && onRoundClick(r.id)}
-            >
-              <div className="round-kpi-head">
-                <div className="round-kpi-date">{fmtDate(r.date)}</div>
-                <div className="round-kpi-course">{r.course || "—"}</div>
-                <div className="round-kpi-arrow">›</div>
-              </div>
-              <div className="round-kpi-grid">
-                <div className="rkpi">
-                  <div className="rkpi-label">スコア</div>
-                  <div className="rkpi-num">
-                    {r.totalScore > 0 ? r.totalScore : r.totalShots || "-"}
+            <div key={r.id} className="round-kpi-card">
+              <button
+                type="button"
+                className="round-kpi-card-main"
+                onClick={() => onRoundClick && onRoundClick(r.id)}
+              >
+                <div className="round-kpi-head">
+                  <div className="round-kpi-date">{fmtDate(r.date)}</div>
+                  <div className="round-kpi-course">{r.course || "—"}</div>
+                  <div className="round-kpi-arrow">›</div>
+                </div>
+                <div className="round-kpi-grid">
+                  <div className="rkpi">
+                    <div className="rkpi-label">スコア</div>
+                    <div className="rkpi-num">
+                      {r.totalScore > 0 ? r.totalScore : r.totalShots || "-"}
+                    </div>
+                  </div>
+                  <div className="rkpi">
+                    <div className="rkpi-label">パット</div>
+                    <div className="rkpi-num">{r.putts}</div>
+                  </div>
+                  <div className="rkpi">
+                    <div className="rkpi-label">パーオン</div>
+                    <div className="rkpi-num">
+                      {r.parOn}
+                      <span className="rkpi-suf">/{r.parOnEligible}</span>
+                    </div>
+                  </div>
+                  <div className="rkpi">
+                    <div className="rkpi-label">FW</div>
+                    <div className="rkpi-num">
+                      {r.fwKeep}
+                      <span className="rkpi-suf">/{r.fwEligible}</span>
+                    </div>
+                  </div>
+                  <div className="rkpi">
+                    <div className="rkpi-label">OB</div>
+                    <div className="rkpi-num">{r.obs}</div>
+                  </div>
+                  <div className="rkpi">
+                    <div className="rkpi-label">記録</div>
+                    <div className="rkpi-num">
+                      {r.recordedHoles}
+                      <span className="rkpi-suf">/18</span>
+                    </div>
                   </div>
                 </div>
-                <div className="rkpi">
-                  <div className="rkpi-label">パット</div>
-                  <div className="rkpi-num">{r.putts}</div>
-                </div>
-                <div className="rkpi">
-                  <div className="rkpi-label">パーオン</div>
-                  <div className="rkpi-num">
-                    {r.parOn}
-                    <span className="rkpi-suf">/{r.parOnEligible}</span>
-                  </div>
-                </div>
-                <div className="rkpi">
-                  <div className="rkpi-label">FW</div>
-                  <div className="rkpi-num">
-                    {r.fwKeep}
-                    <span className="rkpi-suf">/{r.fwEligible}</span>
-                  </div>
-                </div>
-                <div className="rkpi">
-                  <div className="rkpi-label">OB</div>
-                  <div className="rkpi-num">{r.obs}</div>
-                </div>
-                <div className="rkpi">
-                  <div className="rkpi-label">記録</div>
-                  <div className="rkpi-num">
-                    {r.recordedHoles}
-                    <span className="rkpi-suf">/18</span>
-                  </div>
-                </div>
-              </div>
-            </button>
+              </button>
+              {/* v2.6: 詳細分析ボタン */}
+              <button
+                type="button"
+                className="round-kpi-analyze-btn"
+                onClick={() => onAnalyzeRound && onAnalyzeRound(r.id)}
+              >
+                📊 詳細分析
+              </button>
+            </div>
           ))}
         </div>
       </div>
@@ -11929,19 +12330,303 @@ function Style() {
       .kpi-val.trend-down { color: var(--red); }
 
       /* ROUND KPI */
+      /* v2.6: ラウンド分析画面 */
+      .round-analysis-selector {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .round-analysis-selector-label {
+        font-size: 12px;
+        color: var(--text-dim);
+      }
+      .round-analysis-select {
+        padding: 12px 14px;
+        background: var(--bg-1);
+        border: 1px solid var(--border-soft);
+        border-radius: 10px;
+        color: var(--text);
+        font-size: 14px;
+        font-weight: 700;
+        outline: none;
+        cursor: pointer;
+        appearance: none;
+      }
+      .ra-kpi-hero {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: var(--bg-1);
+        border-radius: 12px;
+        padding: 14px 18px;
+        margin-bottom: 8px;
+      }
+      .ra-kpi-hero-score {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      .ra-kpi-hero-num {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 36px;
+        font-weight: 800;
+      }
+      .ra-kpi-hero-diff {
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--text-dim);
+      }
+      .ra-kpi-hero-meta {
+        text-align: right;
+        font-size: 12px;
+        color: var(--text-dim);
+        line-height: 1.4;
+      }
+      .ra-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+      }
+      .ra-kpi-cell {
+        background: var(--bg-1);
+        border-radius: 10px;
+        padding: 10px 8px;
+        text-align: center;
+      }
+      .ra-kpi-cell-label {
+        font-size: 10px;
+        color: var(--text-faint);
+        margin-bottom: 2px;
+      }
+      .ra-kpi-cell-val {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 18px;
+        font-weight: 700;
+      }
+      .ra-club-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .ra-club-card {
+        background: var(--bg-1);
+        border-radius: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--border-soft);
+      }
+      .ra-club-card-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 6px;
+      }
+      .ra-club-card-name {
+        font-size: 16px;
+        font-weight: 800;
+      }
+      .ra-club-card-n {
+        font-size: 11px;
+        color: var(--text-faint);
+        display: flex;
+        align-items: baseline;
+        gap: 4px;
+      }
+      .ra-club-stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .ra-club-stat {
+        background: var(--bg-2);
+        border-radius: 8px;
+        padding: 6px 10px;
+        flex: 1;
+        min-width: 70px;
+      }
+      .ra-club-stat-wide {
+        flex-basis: 100%;
+      }
+      .ra-club-stat-label {
+        font-size: 10px;
+        color: var(--text-faint);
+      }
+      .ra-club-stat-val {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .ra-club-stat-val.tone-bad {
+        color: var(--red, #ff6b6b);
+      }
+      .ra-club-stat-unit {
+        font-size: 10px;
+        color: var(--text-faint);
+        margin-left: 2px;
+      }
+      .ra-flight-mini {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 4px;
+      }
+      .ra-flight-chip {
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 700;
+      }
+      .ra-flight-chip.tone-good {
+        background: rgba(182, 242, 74, 0.18);
+        color: var(--green);
+      }
+      .ra-flight-chip.tone-miss {
+        background: rgba(255, 184, 77, 0.22);
+        color: var(--amber);
+      }
+      .ra-hole-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .ra-hole-row {
+        background: var(--bg-1);
+        border-radius: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--border-soft);
+      }
+      .ra-hole-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 6px;
+      }
+      .ra-hole-num {
+        font-size: 14px;
+        font-weight: 800;
+        min-width: 30px;
+      }
+      .ra-hole-par {
+        font-size: 11px;
+        color: var(--text-dim);
+        background: var(--bg-2);
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+      .ra-hole-dist {
+        font-size: 11px;
+        color: var(--text-faint);
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .ra-hole-score {
+        margin-left: auto;
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+      }
+      .ra-hole-score-num {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 18px;
+        font-weight: 800;
+      }
+      .ra-hole-score-diff {
+        font-size: 13px;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+      .ra-hole-score-diff.tone-good {
+        background: rgba(182, 242, 74, 0.18);
+        color: var(--green);
+      }
+      .ra-hole-score-diff.tone-ok {
+        color: var(--text-dim);
+      }
+      .ra-hole-score-diff.tone-amber {
+        background: rgba(255, 184, 77, 0.22);
+        color: var(--amber);
+      }
+      .ra-hole-score-diff.tone-bad {
+        background: rgba(255, 107, 107, 0.18);
+        color: var(--red, #ff6b6b);
+      }
+      .ra-hole-shots {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding-top: 6px;
+        border-top: 1px solid var(--border-soft);
+      }
+      .ra-shot-line {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--text-dim);
+      }
+      .ra-shot-text {
+        flex: 1;
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .ra-shot-tags {
+        display: flex;
+        gap: 4px;
+      }
+      .ra-shot-tag {
+        font-size: 10px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        font-weight: 700;
+      }
+      .ra-shot-tag.tone-good {
+        background: rgba(182, 242, 74, 0.15);
+        color: var(--green);
+      }
+      .ra-shot-tag.tone-miss {
+        background: rgba(255, 184, 77, 0.2);
+        color: var(--amber);
+      }
+      .ra-shot-tag.tone-bad {
+        background: rgba(255, 107, 107, 0.15);
+        color: var(--red, #ff6b6b);
+      }
+
       .round-kpi-list {
         display: flex; flex-direction: column; gap: 8px;
       }
       .round-kpi-card {
-        background: var(--bg-1); border-radius: 12px;
-        padding: 12px;
+        background: var(--bg-1);
+        border-radius: 12px;
+        border: 1px solid var(--border-soft);
+        overflow: hidden;
+      }
+      .round-kpi-card-main {
         width: 100%;
         text-align: left;
         cursor: pointer;
-        border: 1px solid var(--border-soft);
+        padding: 12px;
+        background: transparent;
+        border: none;
+        color: inherit;
+        display: block;
       }
-      .round-kpi-card:active {
+      .round-kpi-card-main:active {
         background: var(--bg-2);
+      }
+      /* v2.6: 詳細分析ボタン */
+      .round-kpi-analyze-btn {
+        width: 100%;
+        padding: 10px;
+        background: rgba(94, 184, 255, 0.1);
+        border: none;
+        border-top: 1px solid var(--border-soft);
+        color: var(--blue, #5eb8ff);
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .round-kpi-analyze-btn:active {
+        background: rgba(94, 184, 255, 0.2);
       }
       .round-kpi-arrow {
         font-size: 22px;
