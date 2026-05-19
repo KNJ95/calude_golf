@@ -5874,5 +5874,213 @@
         "distance": 273
       }
     ]
+  },
+  {
+    "venue": "定山渓カントリー倶楽部 駒丘コース",
+    "course": "OUT",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 360
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 518
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 202
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 348
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 538
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 420
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 186
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 420
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 371
+      }
+    ]
+  },
+  {
+    "venue": "定山渓カントリー倶楽部 駒丘コース",
+    "course": "OUT",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 346
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 499
+      },
+      {
+        "number": 3,
+        "par": 3,
+        "distance": 186
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 330
+      },
+      {
+        "number": 5,
+        "par": 5,
+        "distance": 515
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 386
+      },
+      {
+        "number": 7,
+        "par": 3,
+        "distance": 165
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 410
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 353
+      }
+    ]
+  },
+  {
+    "venue": "定山渓カントリー倶楽部 駒丘コース",
+    "course": "IN",
+    "tee": "Blue",
+    "holes": [
+      {
+        "number": 10,
+        "par": 4,
+        "distance": 375
+      },
+      {
+        "number": 11,
+        "par": 3,
+        "distance": 177
+      },
+      {
+        "number": 12,
+        "par": 4,
+        "distance": 378
+      },
+      {
+        "number": 13,
+        "par": 4,
+        "distance": 376
+      },
+      {
+        "number": 14,
+        "par": 5,
+        "distance": 476
+      },
+      {
+        "number": 15,
+        "par": 4,
+        "distance": 410
+      },
+      {
+        "number": 16,
+        "par": 3,
+        "distance": 239
+      },
+      {
+        "number": 17,
+        "par": 4,
+        "distance": 410
+      },
+      {
+        "number": 18,
+        "par": 5,
+        "distance": 536
+      }
+    ]
+  },
+  {
+    "venue": "定山渓カントリー倶楽部 駒丘コース",
+    "course": "IN",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 10,
+        "par": 4,
+        "distance": 361
+      },
+      {
+        "number": 11,
+        "par": 3,
+        "distance": 161
+      },
+      {
+        "number": 12,
+        "par": 4,
+        "distance": 367
+      },
+      {
+        "number": 13,
+        "par": 4,
+        "distance": 356
+      },
+      {
+        "number": 14,
+        "par": 5,
+        "distance": 461
+      },
+      {
+        "number": 15,
+        "par": 4,
+        "distance": 391
+      },
+      {
+        "number": 16,
+        "par": 3,
+        "distance": 198
+      },
+      {
+        "number": 17,
+        "par": 4,
+        "distance": 389
+      },
+      {
+        "number": 18,
+        "par": 5,
+        "distance": 506
+      }
+    ]
   }
 ]
