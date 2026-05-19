@@ -1160,6 +1160,41 @@ const BALL_FLIGHTS = [
   { id: "straight", label: "↑ ストレート", tone: "good", center: true },
 ];
 
+// v2.7: パター結果（複数選択対応）
+// グループ排他：result(in/ok)、distance(short/over)、direction(left/right)
+const PUTT_RESULT_GROUPS = {
+  in: "result", ok: "result",
+  short: "distance", over: "distance",
+  left: "direction", right: "direction",
+};
+// ショットからパター結果の配列を取得（後方互換）
+// 旧データは puttResult (単一文字列)、新データは puttResults (配列)
+function getPuttResults(shot) {
+  if (Array.isArray(shot?.puttResults)) return shot.puttResults;
+  if (shot?.puttResult) return [shot.puttResult];
+  return [];
+}
+// ショットの主要なパター結果（後方互換用、サマリやテーブルで使用）
+function getPuttPrimaryResult(shot) {
+  const results = getPuttResults(shot);
+  if (results.length === 0) return null;
+  // IN優先 → OK → short/over → left/right の順で返す
+  const order = ["in", "ok", "short", "over", "left", "right"];
+  for (const r of order) {
+    if (results.includes(r)) return r;
+  }
+  return results[0];
+}
+// IN判定（IN含む場合true）
+function isPuttIn(shot) {
+  return getPuttResults(shot).includes("in");
+}
+// OK圏内判定（IN または OK 含む場合true）
+function isPuttOk(shot) {
+  const r = getPuttResults(shot);
+  return r.includes("in") || r.includes("ok");
+}
+
 
 // ============================================================
 //  KPI / AI PROMPTS
@@ -1253,13 +1288,16 @@ function buildRoundReviewPrompt(round, clubs, unit) {
         distCol = `${s.distance}${unit}`;
       }
 
-      // 結果: ウェッジ→配列ラベル、パター→puttResult、通常→outcome
+      // 結果: ウェッジ→配列ラベル、パター→puttResults配列、通常→outcome
       let resultCol = OUTCOME_LABELS[oc] || "—";
-      if (isPutterShot && s.puttResult) {
+      if (isPutterShot) {
         const PUTT_LBL = {
           in: "🎯IN", ok: "OK", short: "短", over: "長", left: "左", right: "右",
         };
-        resultCol = PUTT_LBL[s.puttResult] || "—";
+        const results = getPuttResults(s);
+        if (results.length > 0) {
+          resultCol = results.map((r) => PUTT_LBL[r] || r).join("+");
+        }
       } else if (isWedgeShot) {
         const arr = Array.isArray(s.wedgeResult)
           ? s.wedgeResult
@@ -1474,20 +1512,19 @@ function buildRoundReviewPrompt(round, clubs, unit) {
     lines.push("## このラウンドのパッティング");
     lines.push("");
     const totalPutts = putterShots.length;
-    const inCount = putterShots.filter((s) => s.puttResult === "in").length;
-    const okCount = putterShots.filter((s) => s.puttResult === "ok").length;
-    const shortCount = putterShots.filter(
-      (s) => s.puttResult === "short"
-    ).length;
-    const overCount = putterShots.filter((s) => s.puttResult === "over").length;
-    const leftCount = putterShots.filter((s) => s.puttResult === "left").length;
-    const rightCount = putterShots.filter(
-      (s) => s.puttResult === "right"
-    ).length;
+    // v2.7: 複数選択対応（IN/OK が含まれているかをカウント）
+    const hasResult = (s, key) => getPuttResults(s).includes(key);
+    const inCount = putterShots.filter((s) => hasResult(s, "in")).length;
+    const okCount = putterShots.filter((s) => hasResult(s, "ok")).length;
+    const shortCount = putterShots.filter((s) => hasResult(s, "short")).length;
+    const overCount = putterShots.filter((s) => hasResult(s, "over")).length;
+    const leftCount = putterShots.filter((s) => hasResult(s, "left")).length;
+    const rightCount = putterShots.filter((s) => hasResult(s, "right")).length;
     lines.push(`- 総パット数: ${totalPutts}`);
     lines.push(
       `- カップイン: ${inCount} / OK圏内: ${okCount} / ショート: ${shortCount} / オーバー: ${overCount} / 左外し: ${leftCount} / 右外し: ${rightCount}`
     );
+    lines.push(`  ※ 複数結果（オーバー+右外しなど）は各々カウント、合計はパット数より多くなる場合あり`);
     // 距離別のサマリ（v2.5: 0.5m を境界に細分化）
     const distSums = {
       lt05: [],
@@ -1499,8 +1536,7 @@ function buildRoundReviewPrompt(round, clubs, unit) {
     putterShots.forEach((s) => {
       if (s.puttDistance == null) return;
       const d = s.puttDistance;
-      const result = s.puttResult;
-      const ok = result === "in" || result === "ok";
+      const ok = isPuttOk(s);
       if (d < 0.5) distSums.lt05.push(ok);
       else if (d < 1) distSums["05to1"].push(ok);
       else if (d < 2) distSums["1to2"].push(ok);
@@ -2406,10 +2442,8 @@ function computePutterStats(state) {
         s.puttDistance >= b.min &&
         s.puttDistance < b.max
     );
-    const inCount = inBucket.filter((s) => s.puttResult === "in").length;
-    const okOrIn = inBucket.filter(
-      (s) => s.puttResult === "in" || s.puttResult === "ok"
-    ).length;
+    const inCount = inBucket.filter((s) => isPuttIn(s)).length;
+    const okOrIn = inBucket.filter((s) => isPuttOk(s)).length;
     return {
       ...b,
       n: inBucket.length,
@@ -2430,10 +2464,8 @@ function computePutterStats(state) {
   ];
   const bySlope = slopeOptions.map((o) => {
     const filtered = shots.filter((s) => s.puttLineSlope === o.id);
-    const inCount = filtered.filter((s) => s.puttResult === "in").length;
-    const okOrIn = filtered.filter(
-      (s) => s.puttResult === "in" || s.puttResult === "ok"
-    ).length;
+    const inCount = filtered.filter((s) => isPuttIn(s)).length;
+    const okOrIn = filtered.filter((s) => isPuttOk(s)).length;
     return {
       ...o,
       n: filtered.length,
@@ -2454,10 +2486,8 @@ function computePutterStats(state) {
   ];
   const byCurve = curveOptions.map((o) => {
     const filtered = shots.filter((s) => s.puttLineCurve === o.id);
-    const inCount = filtered.filter((s) => s.puttResult === "in").length;
-    const okOrIn = filtered.filter(
-      (s) => s.puttResult === "in" || s.puttResult === "ok"
-    ).length;
+    const inCount = filtered.filter((s) => isPuttIn(s)).length;
+    const okOrIn = filtered.filter((s) => isPuttOk(s)).length;
     return {
       ...o,
       n: filtered.length,
@@ -2475,9 +2505,10 @@ function computePutterStats(state) {
     in: 0, ok: 0, short: 0, over: 0, left: 0, right: 0,
   };
   shots.forEach((s) => {
-    if (s.puttResult && resultCounts.hasOwnProperty(s.puttResult)) {
-      resultCounts[s.puttResult]++;
-    }
+    // v2.7: 各結果をそれぞれカウント（複数選択の場合は両方加算）
+    getPuttResults(s).forEach((r) => {
+      if (resultCounts.hasOwnProperty(r)) resultCounts[r]++;
+    });
   });
 
   // ラウンド毎のパット平均
@@ -3824,7 +3855,7 @@ function RoundView({
                         puttDistance: null,
                         puttLineSlope: null,
                         puttLineCurve: null,
-                        puttResult: n === puttCount ? "in" : "ok",
+                        puttResults: n === puttCount ? ["in"] : ["ok"],
                         memo: "",
                         outcome: "in_play",
                       });
@@ -4192,9 +4223,11 @@ function ShotRowInner({ index, shot, clubs, unit, onClick }) {
       left: { label: "← 左外し", tone: "miss" },
       right: { label: "右外し →", tone: "miss" },
     };
-    const result = shot.puttResult
-      ? PUTT_RESULT_LABELS[shot.puttResult]
-      : null;
+    // v2.7: 複数結果対応
+    const results = getPuttResults(shot);
+    const resultBadges = results
+      .map((r) => PUTT_RESULT_LABELS[r])
+      .filter(Boolean);
     const slopeLabel =
       shot.puttLineSlope === "up"
         ? "↗登"
@@ -4231,9 +4264,17 @@ function ShotRowInner({ index, shot, clubs, unit, onClick }) {
         </div>
         <div className="shot-lie">—</div>
         <div className="shot-result-cell">
-          {result && (
-            <span className={`shot-result tone-${result.tone}`}>
-              {result.label}
+          {resultBadges.length > 0 && (
+            <span className="shot-result-multi">
+              {resultBadges.map((r, i) => (
+                <span
+                  key={i}
+                  className={`shot-result tone-${r.tone}`}
+                  style={{ marginRight: 4 }}
+                >
+                  {r.label}
+                </span>
+              ))}
             </span>
           )}
         </div>
@@ -4799,9 +4840,24 @@ function ShotEditor({
   const [puttLineCurve, setPuttLineCurve] = useState(
     existing?.puttLineCurve || null
   ); // 'hook' | 'straight' | 'slice'
-  const [puttResult, setPuttResult] = useState(
-    existing?.puttResult || null
-  ); // 'in' | 'ok' | 'short' | 'over' | 'left' | 'right'
+  // v2.7: パター結果（複数選択対応、グループ排他）
+  // 配列：例 ["over", "right"] / ["in"] / ["ok"]
+  const [puttResults, setPuttResults] = useState(() => {
+    if (Array.isArray(existing?.puttResults)) return existing.puttResults;
+    if (existing?.puttResult) return [existing.puttResult];
+    return [];
+  });
+  // v2.7: グループ排他で結果トグル
+  const togglePuttResult = (id) => {
+    const group = PUTT_RESULT_GROUPS[id];
+    setPuttResults((prev) => {
+      const isOn = prev.includes(id);
+      // 同じグループの他要素を除去
+      const cleaned = prev.filter((r) => PUTT_RESULT_GROUPS[r] !== group);
+      if (isOn) return cleaned; // 同じものを再タップ → OFF
+      return [...cleaned, id];
+    });
+  };
   // v2.1: 複数打を一括記録するための打数（編集モードでは1固定、新規追加モードのみ可変）
   const [puttCount, setPuttCount] = useState(1);
 
@@ -5901,11 +5957,11 @@ function ShotEditor({
 
   // v2.5: 自己評価必須（パター除く）
   // v2.5: 必須項目
-  // - パター: クラブ + パット結果
+  // - パター: クラブ + パット結果（v2.7: 複数選択対応）
   // - ウェッジ: クラブ + 自己評価のみ（距離・結果は任意）
   // - 通常: クラブ + 結果(outcome) + ライ + 自己評価
   const canSave = isPutter
-    ? clubId && puttResult
+    ? clubId && puttResults.length > 0
     : isWedge
     ? clubId && selfRating
     : clubId && outcome && lie && selfRating;
@@ -6701,9 +6757,9 @@ function ShotEditor({
                     key={r.id}
                     type="button"
                     className={`chip putt-result-chip tone-${r.tone} ${
-                      puttResult === r.id ? "on" : ""
+                      puttResults.includes(r.id) ? "on" : ""
                     }`}
-                    onClick={() => setPuttResult(r.id)}
+                    onClick={() => togglePuttResult(r.id)}
                   >
                     {r.label}
                   </button>
@@ -6965,9 +7021,9 @@ function ShotEditor({
                         puttDistance,
                         puttLineSlope,
                         puttLineCurve,
-                        puttResult,
+                        puttResults, // v2.7: 配列で保存
                         memo,
-                        // outcome は in_play 固定（パターはin/outをputtResultで管理）
+                        // outcome は in_play 固定（パターはin/outを puttResults で管理）
                         outcome: "in_play",
                         // v2.1: 複数打を一括記録するための打数（編集モードでは無視）
                         _puttCount: mode === "edit" ? 1 : puttCount,
@@ -8810,7 +8866,8 @@ function RoundAnalysisView({ initialRoundId, state, onBack }) {
                       if (isP) {
                         if (s.puttDistance != null)
                           line += ` ${s.puttDistance}m`;
-                        if (s.puttResult) {
+                        const results = getPuttResults(s);
+                        if (results.length > 0) {
                           const labels = {
                             in: "🎯IN",
                             ok: "OK圏",
@@ -8819,7 +8876,9 @@ function RoundAnalysisView({ initialRoundId, state, onBack }) {
                             left: "左",
                             right: "右",
                           };
-                          line += ` ${labels[s.puttResult] || s.puttResult}`;
+                          line += ` ${results
+                            .map((r) => labels[r] || r)
+                            .join("+")}`;
                         }
                       } else if (isW) {
                         if (s.wedgeTargetDistance != null)
