@@ -1174,17 +1174,6 @@ function getPuttResults(shot) {
   if (shot?.puttResult) return [shot.puttResult];
   return [];
 }
-// ショットの主要なパター結果（後方互換用、サマリやテーブルで使用）
-function getPuttPrimaryResult(shot) {
-  const results = getPuttResults(shot);
-  if (results.length === 0) return null;
-  // IN優先 → OK → short/over → left/right の順で返す
-  const order = ["in", "ok", "short", "over", "left", "right"];
-  for (const r of order) {
-    if (results.includes(r)) return r;
-  }
-  return results[0];
-}
 // IN判定（IN含む場合true）
 function isPuttIn(shot) {
   return getPuttResults(shot).includes("in");
