@@ -6082,5 +6082,161 @@
         "distance": 506
       }
     ]
+  },
+  {
+    "venue": "南幌リバーサイドカントリークラブ",
+    "course": "西",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 370
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 495
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 376
+      },
+      {
+        "number": 4,
+        "par": 5,
+        "distance": 528
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 385
+      },
+      {
+        "number": 6,
+        "par": 3,
+        "distance": 152
+      },
+      {
+        "number": 7,
+        "par": 4,
+        "distance": 366
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 371
+      },
+      {
+        "number": 9,
+        "par": 3,
+        "distance": 175
+      }
+    ]
+  },
+  {
+    "venue": "南幌リバーサイドカントリークラブ",
+    "course": "南",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 355
+      },
+      {
+        "number": 2,
+        "par": 4,
+        "distance": 351
+      },
+      {
+        "number": 3,
+        "par": 5,
+        "distance": 509
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 284
+      },
+      {
+        "number": 5,
+        "par": 3,
+        "distance": 154
+      },
+      {
+        "number": 6,
+        "par": 4,
+        "distance": 319
+      },
+      {
+        "number": 7,
+        "par": 5,
+        "distance": 501
+      },
+      {
+        "number": 8,
+        "par": 3,
+        "distance": 122
+      },
+      {
+        "number": 9,
+        "par": 4,
+        "distance": 397
+      }
+    ]
+  },
+  {
+    "venue": "南幌リバーサイドカントリークラブ",
+    "course": "北",
+    "tee": "White",
+    "holes": [
+      {
+        "number": 1,
+        "par": 4,
+        "distance": 337
+      },
+      {
+        "number": 2,
+        "par": 5,
+        "distance": 523
+      },
+      {
+        "number": 3,
+        "par": 4,
+        "distance": 310
+      },
+      {
+        "number": 4,
+        "par": 4,
+        "distance": 349
+      },
+      {
+        "number": 5,
+        "par": 4,
+        "distance": 370
+      },
+      {
+        "number": 6,
+        "par": 3,
+        "distance": 161
+      },
+      {
+        "number": 7,
+        "par": 5,
+        "distance": 505
+      },
+      {
+        "number": 8,
+        "par": 4,
+        "distance": 335
+      },
+      {
+        "number": 9,
+        "par": 3,
+        "distance": 130
+      }
+    ]
   }
 ]
