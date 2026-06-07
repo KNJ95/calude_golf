@@ -5281,6 +5281,10 @@ function ShotEditor({
       (window.SpeechRecognition || window.webkitSpeechRecognition)
     );
   }, []);
+  // v2.8: 音声入力UI を表示するか（false で完全に非表示にする）
+  // 将来再有効化したい場合は true に戻すだけ
+  const VOICE_UI_ENABLED = false;
+  const showVoiceUI = VOICE_UI_ENABLED && speechSupported;
 
   // 認識結果を解析してフィールドにマッピング
   const parseTranscript = (text, currentValues) => {
@@ -6509,8 +6513,8 @@ function ShotEditor({
           </button>
         </div>
 
-        {/* v2.1/v3: 音声入力 - クイック + 対話 */}
-        {speechSupported && (
+        {/* v2.1/v3: 音声入力 - クイック + 対話（v2.8: VOICE_UI_ENABLED で制御） */}
+        {showVoiceUI && (
           <div className="voice-input-section">
             <div className="voice-btn-group">
               <button
