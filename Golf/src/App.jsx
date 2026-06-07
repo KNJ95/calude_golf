@@ -2697,38 +2697,28 @@ function BottomNav({ active, onNavigate }) {
   );
 }
 
-// v2.7: コース別集計（venue + course 単位でグルーピング）
-// 同じ会場の同じスコアカード組み合わせ（OUT→IN）ごとに集計
+// v2.7: コース別集計（venue 単位でグルーピング）
+// 同じ会場ならコース組み合わせやOUT/INの順番関係なく統合
 function getCourseKey(round) {
-  // venue + frontCourse + backCourse の組み合わせを一意なキーに
-  const v = (round.venue || "").trim();
-  const fc = (round.frontCourse || "").trim();
-  const bc = (round.backCourse || "").trim();
-  return JSON.stringify({ v, fc, bc });
+  return (round.venue || "").trim();
 }
 
 function getCourseLabel(round) {
-  const v = (round.venue || "").trim() || "—";
-  const fc = (round.frontCourse || "").trim();
-  const bc = (round.backCourse || "").trim();
-  if (fc && bc) return `${v} [${fc} → ${bc}]`;
-  if (fc) return `${v} [${fc}]`;
-  return v;
+  return (round.venue || "").trim() || "—";
 }
 
-// 各コース（venue + course 組み合わせ）ごとの分析
+// 各コース（venue 単位）ごとの分析
 function computeCourseStats(state) {
   const { rounds, clubs } = state;
   const byCourse = {};
   rounds.forEach((r) => {
     const key = getCourseKey(r);
+    if (!key) return;
     if (!byCourse[key]) {
       byCourse[key] = {
         key,
         label: getCourseLabel(r),
         venue: r.venue,
-        frontCourse: r.frontCourse,
-        backCourse: r.backCourse,
         rounds: [],
       };
     }
@@ -2746,33 +2736,38 @@ function computeCourseStats(state) {
       const totalScores = validKpis
         .map((k) => k.totalScore)
         .filter((s) => s > 0);
-      const totalPars = sortedRounds
-        .map((r) => r.holes.reduce((s, h) => s + (h.par || 0), 0));
+      const totalPars = sortedRounds.map((r) =>
+        r.holes.reduce((s, h) => s + (h.par || 0), 0)
+      );
       // 平均、ベスト、ワースト
-      const avgScore =
-        totalScores.length
-          ? Math.round(
-              (totalScores.reduce((a, b) => a + b, 0) / totalScores.length) * 10
-            ) / 10
-          : null;
+      const avgScore = totalScores.length
+        ? Math.round(
+            (totalScores.reduce((a, b) => a + b, 0) / totalScores.length) * 10
+          ) / 10
+        : null;
       const bestScore = totalScores.length ? Math.min(...totalScores) : null;
       const worstScore = totalScores.length ? Math.max(...totalScores) : null;
-      // パット数平均
       const putts = validKpis.map((k) => k.putts);
-      const avgPutts =
-        putts.length
-          ? Math.round((putts.reduce((a, b) => a + b, 0) / putts.length) * 10) / 10
-          : null;
+      const avgPutts = putts.length
+        ? Math.round((putts.reduce((a, b) => a + b, 0) / putts.length) * 10) /
+          10
+        : null;
 
-      // ホール別集計（同じホール番号でスコアを横断）
+      // v2.7: ホール別集計（OUT/IN 区別なし → 1-9 + 10-18 を統合）
+      // OUT/INを逆周りしても同じホールとして集計するには、
+      // 「物理的なホール（コース+ホール番号）」で識別する必要があるが、
+      // ここではホール番号(1-18)で集計（前半・後半の物理的な意味が違っても
+      // venue内のホール番号として統合）。
+      // ※ ④の要望：「OUT・INをすみわけしない」を踏まえ、ホール番号でそのまま集計
       const holeAgg = {};
       sortedRounds.forEach((r) => {
         r.holes.forEach((h, i) => {
           const score = getHoleScore(h);
           if (score === 0) return;
-          if (!holeAgg[i]) {
-            holeAgg[i] = {
-              num: i + 1,
+          const holeNum = i + 1; // 1-18
+          if (!holeAgg[holeNum]) {
+            holeAgg[holeNum] = {
+              num: holeNum,
               par: h.par || 4,
               distance: h.distance || null,
               scores: [],
@@ -2782,44 +2777,39 @@ function computeCourseStats(state) {
               putts: [],
             };
           }
-          holeAgg[i].scores.push(score);
-          const diff = score - holeAgg[i].par;
-          if (diff >= 2) holeAgg[i].double_plus++;
-          else if (diff >= 1) holeAgg[i].bogey_plus++;
-          else holeAgg[i].par_or_better++;
+          holeAgg[holeNum].scores.push(score);
+          const diff = score - holeAgg[holeNum].par;
+          if (diff >= 2) holeAgg[holeNum].double_plus++;
+          else if (diff >= 1) holeAgg[holeNum].bogey_plus++;
+          else holeAgg[holeNum].par_or_better++;
           // パット数
           const putts = (h.shots || []).filter((s) => {
             const c = clubs.find((cc) => cc.id === s.clubId);
             return c?.category === "putter";
           }).length;
-          if (h.manualPutts != null) holeAgg[i].putts.push(h.manualPutts);
-          else if (putts > 0) holeAgg[i].putts.push(putts);
+          if (h.manualPutts != null) holeAgg[holeNum].putts.push(h.manualPutts);
+          else if (putts > 0) holeAgg[holeNum].putts.push(putts);
         });
       });
       const holes = Object.values(holeAgg).map((h) => ({
         ...h,
-        avgScore:
-          h.scores.length
-            ? Math.round(
-                (h.scores.reduce((a, b) => a + b, 0) / h.scores.length) * 10
-              ) / 10
-            : null,
-        avgDiff:
-          h.scores.length
-            ? Math.round(
-                ((h.scores.reduce((a, b) => a + b, 0) / h.scores.length) -
-                  h.par) *
-                  10
-              ) / 10
-            : null,
-        avgPutts:
-          h.putts.length
-            ? Math.round(
-                (h.putts.reduce((a, b) => a + b, 0) / h.putts.length) * 10
-              ) / 10
-            : null,
+        avgScore: h.scores.length
+          ? Math.round(
+              (h.scores.reduce((a, b) => a + b, 0) / h.scores.length) * 10
+            ) / 10
+          : null,
+        avgDiff: h.scores.length
+          ? Math.round(
+              (h.scores.reduce((a, b) => a + b, 0) / h.scores.length - h.par) *
+                10
+            ) / 10
+          : null,
+        avgPutts: h.putts.length
+          ? Math.round(
+              (h.putts.reduce((a, b) => a + b, 0) / h.putts.length) * 10
+            ) / 10
+          : null,
         n: h.scores.length,
-        // 鬼門スコア = 平均 Par 差（高いほど苦手）
       }));
 
       // 鬼門ランキング（Par 差降順）
@@ -2844,21 +2834,20 @@ function computeCourseStats(state) {
           if (!c) return null;
           const isP = c.category === "putter";
           const isW = c.category === "wedge";
-          const dists = !isW && !isP
-            ? shots.map((s) => s.distance).filter((d) => d != null)
-            : [];
+          const dists =
+            !isW && !isP
+              ? shots.map((s) => s.distance).filter((d) => d != null)
+              : [];
           const avgDist = dists.length
             ? Math.round(dists.reduce((a, b) => a + b, 0) / dists.length)
             : null;
           const missCount = shots.filter(
-            (s) =>
-              s.isMiss ||
-              (s.selfRating && s.selfRating === "bad")
+            (s) => s.isMiss || (s.selfRating && s.selfRating === "bad")
           ).length;
-          // 球筋
           const flightShots = shots.filter((s) => s.ballFlight);
           const flight = {
-            straight: flightShots.filter((s) => s.ballFlight === "straight").length,
+            straight: flightShots.filter((s) => s.ballFlight === "straight")
+              .length,
             fade: flightShots.filter((s) => s.ballFlight === "fade").length,
             draw: flightShots.filter((s) => s.ballFlight === "draw").length,
             slice: flightShots.filter((s) => s.ballFlight === "slice").length,
@@ -2870,7 +2859,9 @@ function computeCourseStats(state) {
             n: shots.length,
             avgDist,
             missCount,
-            missRate: shots.length ? Math.round((missCount / shots.length) * 100) : 0,
+            missRate: shots.length
+              ? Math.round((missCount / shots.length) * 100)
+              : 0,
             flight,
             isP,
             isW,
@@ -3885,6 +3876,21 @@ function RoundView({
     }));
   };
 
+  // v2.7: ショット並び替え（fromIndex → toIndex）
+  const reorderShots = (fromIndex, toIndex) => {
+    if (fromIndex === toIndex) return;
+    onUpdate((r) => ({
+      ...r,
+      holes: r.holes.map((h, i) => {
+        if (i !== holeIdx) return h;
+        const newShots = [...h.shots];
+        const [moved] = newShots.splice(fromIndex, 1);
+        newShots.splice(toIndex, 0, moved);
+        return { ...h, shots: newShots };
+      }),
+    }));
+  };
+
   return (
     <div className="screen round-screen">
       <header className="topbar">
@@ -3946,19 +3952,16 @@ function RoundView({
             <div className="empty-shots-text">最初のショットを記録</div>
           </div>
         ) : (
-          <div className="shot-list">
-            {hole.shots.map((s, i) => (
-              <ShotRow
-                key={s.id}
-                index={i + 1}
-                shot={s}
-                clubs={clubs}
-                unit={unit}
-                onClick={() => setShotEditor({ mode: "edit", shotId: s.id })}
-                onDelete={() => deleteShot(s.id)}
-              />
-            ))}
-          </div>
+          <SortableShotList
+            shots={hole.shots}
+            clubs={clubs}
+            unit={unit}
+            onClick={(shotId) =>
+              setShotEditor({ mode: "edit", shotId })
+            }
+            onDelete={deleteShot}
+            onReorder={reorderShots}
+          />
         )}
       </div>
 
@@ -4291,6 +4294,140 @@ function DistanceField({ value, unit, placeholder, onChange }) {
         }
       />
       <span className="unit">{unit}</span>
+    </div>
+  );
+}
+
+// v2.7: ドラッグ&ドロップ対応のショットリスト（長押しで並び替え）
+function SortableShotList({ shots, clubs, unit, onClick, onDelete, onReorder }) {
+  const [draggingIndex, setDraggingIndex] = useState(null);
+  const [overIndex, setOverIndex] = useState(null);
+  // タッチ用 long-press タイマー
+  const [touchReady, setTouchReady] = useState(null); // index when long-press fires
+  const longPressTimerRef = useRef(null);
+  const lastTouchYRef = useRef(0);
+  const rowRefs = useRef({});
+
+  const handleDragStart = (e, idx) => {
+    setDraggingIndex(idx);
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+      try {
+        e.dataTransfer.setData("text/plain", String(idx));
+      } catch {}
+    }
+  };
+  const handleDragOver = (e, idx) => {
+    e.preventDefault();
+    if (draggingIndex == null) return;
+    setOverIndex(idx);
+  };
+  const handleDragEnd = () => {
+    if (
+      draggingIndex != null &&
+      overIndex != null &&
+      draggingIndex !== overIndex
+    ) {
+      onReorder(draggingIndex, overIndex);
+    }
+    setDraggingIndex(null);
+    setOverIndex(null);
+  };
+
+  // タッチイベント処理（long-press で並び替えモード起動）
+  const handleTouchStart = (e, idx) => {
+    lastTouchYRef.current = e.touches[0].clientY;
+    longPressTimerRef.current = setTimeout(() => {
+      setTouchReady(idx);
+      setDraggingIndex(idx);
+      // vibration（対応端末のみ）
+      if (navigator.vibrate) {
+        try { navigator.vibrate(20); } catch {}
+      }
+    }, 350);
+  };
+  const handleTouchMove = (e, idx) => {
+    // 並び替えモード起動前に動いたらキャンセル
+    if (touchReady == null && longPressTimerRef.current) {
+      const dy = Math.abs(e.touches[0].clientY - lastTouchYRef.current);
+      if (dy > 10) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+      return;
+    }
+    // 並び替えモード中：タッチ位置の下にある要素を探す
+    if (touchReady != null) {
+      e.preventDefault(); // スクロール抑制
+      const touch = e.touches[0];
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (!el) return;
+      const row = el.closest("[data-shot-idx]");
+      if (row) {
+        const targetIdx = parseInt(row.dataset.shotIdx, 10);
+        if (!isNaN(targetIdx)) setOverIndex(targetIdx);
+      }
+    }
+  };
+  const handleTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    if (
+      touchReady != null &&
+      draggingIndex != null &&
+      overIndex != null &&
+      draggingIndex !== overIndex
+    ) {
+      onReorder(draggingIndex, overIndex);
+    }
+    setTouchReady(null);
+    setDraggingIndex(null);
+    setOverIndex(null);
+  };
+
+  return (
+    <div className="shot-list">
+      {shots.map((s, i) => {
+        const isDragging = draggingIndex === i;
+        const isOver = overIndex === i && draggingIndex !== i;
+        return (
+          <div
+            key={s.id}
+            data-shot-idx={i}
+            ref={(el) => (rowRefs.current[i] = el)}
+            className={`shot-row-wrapper ${
+              isDragging ? "dragging" : ""
+            } ${isOver ? "over" : ""} ${touchReady === i ? "lifted" : ""}`}
+            draggable
+            onDragStart={(e) => handleDragStart(e, i)}
+            onDragOver={(e) => handleDragOver(e, i)}
+            onDragEnd={handleDragEnd}
+            onDrop={(e) => {
+              e.preventDefault();
+              handleDragEnd();
+            }}
+            onTouchStart={(e) => handleTouchStart(e, i)}
+            onTouchMove={(e) => handleTouchMove(e, i)}
+            onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchEnd}
+          >
+            <ShotRow
+              index={i + 1}
+              shot={s}
+              clubs={clubs}
+              unit={unit}
+              onClick={() => {
+                // ドラッグ中はクリック無効
+                if (draggingIndex != null || touchReady != null) return;
+                onClick(s.id);
+              }}
+              onDelete={() => onDelete(s.id)}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -9309,7 +9446,11 @@ function RoundsSubTab({ state, onRoundClick, onAnalyzeRound }) {
 
 // v2.7: コース別サブタブ
 function CoursesSubTab({ state, onAnalyzeCourse }) {
-  const courses = useMemo(() => computeCourseStats(state), [state]);
+  // v2.7: state.rounds が変わるたびに再計算（リアルタイム反映）
+  const courses = useMemo(
+    () => computeCourseStats(state),
+    [state.rounds, state.clubs]
+  );
   if (courses.length === 0) return <EmptyAnalytics />;
 
   return (
@@ -9362,7 +9503,11 @@ function CoursesSubTab({ state, onAnalyzeCourse }) {
 
 // v2.7: コース詳細分析画面
 function CourseAnalysisView({ courseKey, state, onBack }) {
-  const all = useMemo(() => computeCourseStats(state), [state]);
+  // v2.7: state.rounds が変わるたびに再計算（リアルタイム反映）
+  const all = useMemo(
+    () => computeCourseStats(state),
+    [state.rounds, state.clubs]
+  );
   const course = all.find((c) => c.key === courseKey);
   const { unit } = state;
 
@@ -9611,6 +9756,8 @@ function CourseAnalysisView({ courseKey, state, onBack }) {
             })}
         </div>
       </div>
+      {/* v2.7: 下部の余白（bottom-nav に隠れないよう） */}
+      <div className="bottom-spacer" />
     </>
   );
 }
@@ -11263,6 +11410,32 @@ function Style() {
       .empty-shots-text { font-size: 12px; color: var(--text-faint); }
 
       .shot-list { display: flex; flex-direction: column; gap: 6px; }
+      /* v2.7: ドラッグ&ドロップのフィードバック */
+      .shot-row-wrapper {
+        transition: transform 0.15s, opacity 0.15s;
+        position: relative;
+      }
+      .shot-row-wrapper.dragging {
+        opacity: 0.5;
+        transform: scale(0.97);
+      }
+      .shot-row-wrapper.lifted {
+        transform: scale(1.03);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        z-index: 10;
+        opacity: 0.85;
+      }
+      .shot-row-wrapper.over::before {
+        content: '';
+        position: absolute;
+        top: -3px;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: var(--green);
+        border-radius: 2px;
+        z-index: 1;
+      }
 
       /* v2.1: スワイプ削除 */
       .shot-row-swipe-wrap {
@@ -13205,6 +13378,10 @@ function Style() {
         display: flex; flex-direction: column; gap: 8px;
       }
       /* v2.7: ラウンドタブのサブタブ */
+      .bottom-spacer {
+        height: calc(120px + env(safe-area-inset-bottom));
+      }
+
       .rounds-subtabs {
         display: flex;
         gap: 4px;
