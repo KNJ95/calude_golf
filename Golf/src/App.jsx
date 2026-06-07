@@ -9446,11 +9446,8 @@ function RoundsSubTab({ state, onRoundClick, onAnalyzeRound }) {
 
 // v2.7: コース別サブタブ
 function CoursesSubTab({ state, onAnalyzeCourse }) {
-  // v2.7: state.rounds が変わるたびに再計算（リアルタイム反映）
-  const courses = useMemo(
-    () => computeCourseStats(state),
-    [state.rounds, state.clubs]
-  );
+  // v2.7: state が変わるたびに再計算（リアルタイム反映）
+  const courses = useMemo(() => computeCourseStats(state), [state]);
   if (courses.length === 0) return <EmptyAnalytics />;
 
   return (
@@ -9503,11 +9500,8 @@ function CoursesSubTab({ state, onAnalyzeCourse }) {
 
 // v2.7: コース詳細分析画面
 function CourseAnalysisView({ courseKey, state, onBack }) {
-  // v2.7: state.rounds が変わるたびに再計算（リアルタイム反映）
-  const all = useMemo(
-    () => computeCourseStats(state),
-    [state.rounds, state.clubs]
-  );
+  // v2.7: state が変わるたびに再計算（リアルタイム反映）
+  const all = useMemo(() => computeCourseStats(state), [state]);
   const course = all.find((c) => c.key === courseKey);
   const { unit } = state;
 
