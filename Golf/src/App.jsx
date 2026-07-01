@@ -4836,6 +4836,16 @@ function ShotRowInner({ index, shot, clubs, unit, onClick }) {
           )}
         </div>
         <div className="shot-tendency-tags">
+          {shot.wedgeImpact && shot.wedgeImpact !== "center" && (
+            <span className="tag tag-contact">
+              {shot.wedgeImpact === "heel" ? "ヒール" : "トウ"}
+            </span>
+          )}
+          {shot.wedgeLanding && (
+            <span className="tag tag-contact">
+              {{ green: "グリーン", fringe: "フリンジ", rough: "ラフ", bunker: "バンカー", ob: "OB/池" }[shot.wedgeLanding]}
+            </span>
+          )}
           {shot.contact && shot.contact !== "nice" && (
             <span className="tag tag-contact">
               {CONTACT_LABELS[shot.contact]}
@@ -5390,6 +5400,10 @@ function ShotEditor({
     if (typeof r === "string" && r) return [r];
     return [];
   }); // (string)[] : ['pin'|'green', 'short'|'over', 'left'|'right'] の最大3要素
+  // 打点（フェース面：heel/center/toe）
+  const [wedgeImpact, setWedgeImpact] = useState(existing?.wedgeImpact || null);
+  // 着地（初着地：green/fringe/rough/bunker/ob）
+  const [wedgeLanding, setWedgeLanding] = useState(existing?.wedgeLanding || null);
 
   // パター専用UIを表示するかどうか
   const isPutter = useMemo(() => {
@@ -6496,6 +6510,8 @@ function ShotEditor({
           wedgeTargetDistance,
           wedgeDistance,
           wedgeResult: wedgeResults,
+          wedgeImpact: wedgeImpact || undefined,
+          wedgeLanding: wedgeLanding || undefined,
           selfRating, // v2.4: ウェッジにも自己評価
           contact,
           memo,
@@ -7469,6 +7485,56 @@ function ShotEditor({
             </div>
 
             <div className="editor-section">
+              <div className="editor-label">打点（任意）</div>
+              <div className="contact-row">
+                {[
+                  { id: "heel", label: "ヒール" },
+                  { id: "center", label: "センター" },
+                  { id: "toe", label: "トウ" },
+                ].map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`chip contact-chip ${
+                      wedgeImpact === c.id ? "on" : ""
+                    }`}
+                    onClick={() =>
+                      setWedgeImpact(wedgeImpact === c.id ? null : c.id)
+                    }
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="editor-section">
+              <div className="editor-label">着地（任意）</div>
+              <div className="contact-row">
+                {[
+                  { id: "green", label: "グリーン" },
+                  { id: "fringe", label: "フリンジ" },
+                  { id: "rough", label: "ラフ" },
+                  { id: "bunker", label: "バンカー" },
+                  { id: "ob", label: "OB/池" },
+                ].map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`chip contact-chip ${
+                      wedgeLanding === c.id ? "on" : ""
+                    }`}
+                    onClick={() =>
+                      setWedgeLanding(wedgeLanding === c.id ? null : c.id)
+                    }
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="editor-section">
               <div className="editor-label">打感（任意）</div>
               <div className="contact-row">
                 {[
@@ -7553,6 +7619,8 @@ function ShotEditor({
                         wedgeTargetDistance,
                         wedgeDistance,
                         wedgeResult: wedgeResults, // v2.1: 配列として保存
+                        wedgeImpact: wedgeImpact || undefined,
+                        wedgeLanding: wedgeLanding || undefined,
                         selfRating, // v2.4: ウェッジにも自己評価
                         contact,
                         memo,
