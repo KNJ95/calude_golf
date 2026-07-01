@@ -87,6 +87,14 @@ const Calendar = (p) => (
     <line x1="3" y1="10" x2="21" y2="10" />
   </Icon>
 );
+const ArrowsSwap = (p) => (
+  <Icon {...p}>
+    <path d="M17 1l4 4-4 4" />
+    <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+    <path d="M7 23l-4-4 4-4" />
+    <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+  </Icon>
+);
 
 // ============================================================
 //  CONSTANTS
@@ -3789,6 +3797,124 @@ function NewRoundSheet({ courseMasters, onCancel, onStart, existing }) {
 }
 
 // ============================================================
+//  HOLE MOVE MODAL
+// ============================================================
+function HoleMoveModal({ round, onClose, onConfirm }) {
+  const [mode, setMode] = useState("shift");
+  const [insertAt, setInsertAt] = useState(2);
+  const [swapA, setSwapA] = useState(1);
+  const [swapB, setSwapB] = useState(2);
+  const holeCount = round.holes.length;
+
+  return (
+    <div className="sheet-backdrop" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-handle" />
+        <div className="sheet-title">ホールデータを移動</div>
+
+        <div className="hm-tabs">
+          <button
+            className={`hm-tab ${mode === "shift" ? "active" : ""}`}
+            onClick={() => setMode("shift")}
+          >
+            挿入してシフト
+          </button>
+          <button
+            className={`hm-tab ${mode === "swap" ? "active" : ""}`}
+            onClick={() => setMode("swap")}
+          >
+            2ホール入れ替え
+          </button>
+        </div>
+
+        {mode === "shift" ? (
+          <div className="hm-body">
+            <p className="hm-desc">
+              指定ホールに空ホールを挿入し、それ以降のデータを1つ後ろにずらします。
+              1ホール入力を忘れた場合に使います。
+            </p>
+            <div className="hm-row">
+              <span className="hm-label">空ホールを挿入する位置</span>
+              <select
+                className="hm-select"
+                value={insertAt}
+                onChange={(e) => setInsertAt(Number(e.target.value))}
+              >
+                {Array.from({ length: holeCount }, (_, i) => (
+                  <option key={i + 1} value={i + 1}>
+                    ホール {i + 1}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="hm-warn">
+              ※ ホール{insertAt}〜{holeCount}が後ろにずれます。ホール{holeCount}のデータ（ショット・スコア）は削除されます。
+            </p>
+          </div>
+        ) : (
+          <div className="hm-body">
+            <p className="hm-desc">
+              2つのホールのデータ（ショット・スコア・パット）を丸ごと入れ替えます。
+            </p>
+            <div className="hm-row">
+              <span className="hm-label">ホールA</span>
+              <select
+                className="hm-select"
+                value={swapA}
+                onChange={(e) => setSwapA(Number(e.target.value))}
+              >
+                {Array.from({ length: holeCount }, (_, i) => (
+                  <option key={i + 1} value={i + 1}>
+                    ホール {i + 1}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="hm-row">
+              <span className="hm-label">ホールB</span>
+              <select
+                className="hm-select"
+                value={swapB}
+                onChange={(e) => setSwapB(Number(e.target.value))}
+              >
+                {Array.from({ length: holeCount }, (_, i) => (
+                  <option key={i + 1} value={i + 1}>
+                    ホール {i + 1}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {swapA === swapB && (
+              <p className="hm-warn">異なるホールを選択してください。</p>
+            )}
+          </div>
+        )}
+
+        <div className="sheet-actions">
+          <button className="btn-ghost" onClick={onClose}>
+            キャンセル
+          </button>
+          <button
+            className="btn-primary"
+            disabled={mode === "swap" && swapA === swapB}
+            onClick={() => {
+              onConfirm(
+                mode === "shift"
+                  ? { mode: "shift", insertAt }
+                  : { mode: "swap", holeA: swapA, holeB: swapB }
+              );
+              onClose();
+            }}
+          >
+            実行
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 //  ROUND VIEW
 // ============================================================
 function RoundView({
@@ -3812,7 +3938,46 @@ function RoundView({
   const isLastHole = holeIdx === 17;
   const [showFinish, setShowFinish] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const [showHoleMove, setShowHoleMove] = useState(false);
   const recordedHoles = round.holes.filter((h) => h.shots.length > 0).length;
+
+  const moveHoleData = ({ mode, insertAt, holeA, holeB }) => {
+    onUpdate((r) => {
+      if (mode === "shift") {
+        const idx = insertAt - 1;
+        const newHoles = r.holes.map((h, i) => {
+          if (i < idx) return h;
+          if (i === idx)
+            return { ...h, shots: [], manualScore: undefined, manualPutts: undefined };
+          return {
+            ...h,
+            shots: r.holes[i - 1].shots,
+            manualScore: r.holes[i - 1].manualScore,
+            manualPutts: r.holes[i - 1].manualPutts,
+          };
+        });
+        return { ...r, holes: newHoles };
+      } else {
+        const idxA = holeA - 1;
+        const idxB = holeB - 1;
+        const pick = (h) => ({
+          shots: h.shots,
+          manualScore: h.manualScore,
+          manualPutts: h.manualPutts,
+        });
+        const dataA = pick(r.holes[idxA]);
+        const dataB = pick(r.holes[idxB]);
+        return {
+          ...r,
+          holes: r.holes.map((h, i) => {
+            if (i === idxA) return { ...h, ...dataB };
+            if (i === idxB) return { ...h, ...dataA };
+            return h;
+          }),
+        };
+      }
+    });
+  };
 
   // ホール変更時にコースマスターも上書き保存
   const updateHoleAndMaster = (patch) => {
@@ -3903,13 +4068,23 @@ function RoundView({
             {fmtDate(round.date)} · {totalShots} shots
           </div>
         </div>
-        <button
-          className="icon-btn icon-btn-danger"
-          onClick={() => setShowDelete(true)}
-          aria-label="ラウンド削除"
-        >
-          <Trash2 size={18} />
-        </button>
+        <div className="topbar-right">
+          <button
+            className="icon-btn"
+            onClick={() => setShowHoleMove(true)}
+            aria-label="ホールデータを移動"
+            title="ホールデータを移動"
+          >
+            <ArrowsSwap size={18} />
+          </button>
+          <button
+            className="icon-btn icon-btn-danger"
+            onClick={() => setShowDelete(true)}
+            aria-label="ラウンド削除"
+          >
+            <Trash2 size={18} />
+          </button>
+        </div>
       </header>
 
       <div className="hole-strip">
@@ -4153,6 +4328,14 @@ function RoundView({
             setShowDelete(false);
             onDelete();
           }}
+        />
+      )}
+
+      {showHoleMove && (
+        <HoleMoveModal
+          round={round}
+          onClose={() => setShowHoleMove(false)}
+          onConfirm={moveHoleData}
         />
       )}
     </div>
@@ -14713,6 +14896,46 @@ function Style() {
       .app.in-csb .fab { bottom: calc(142px + 42px + env(safe-area-inset-bottom)); }
 
       /* Standalone (本番Safari/Chrome、PWA含む) はそのままbottom指定が効く */
+
+      /* HOLE MOVE MODAL */
+      .topbar-right {
+        display: flex; align-items: center; gap: 4px;
+      }
+      .hm-tabs {
+        display: flex; gap: 6px; margin-bottom: 14px;
+      }
+      .hm-tab {
+        flex: 1; padding: 9px 8px;
+        background: var(--bg-2); border-radius: 10px;
+        font-size: 13px; color: var(--text-dim);
+        font-weight: 600;
+      }
+      .hm-tab.active {
+        background: rgba(182,242,74,0.15);
+        color: var(--green);
+        border: 1px solid rgba(182,242,74,0.3);
+      }
+      .hm-body { display: flex; flex-direction: column; gap: 12px; }
+      .hm-desc {
+        font-size: 13px; color: var(--text-dim); line-height: 1.6;
+      }
+      .hm-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      }
+      .hm-label { font-size: 13px; color: var(--text); font-weight: 600; }
+      .hm-select {
+        background: var(--bg-2); border: 1px solid var(--border);
+        border-radius: 9px; color: var(--text);
+        padding: 8px 12px; font-size: 14px;
+        min-width: 110px;
+      }
+      .hm-warn {
+        font-size: 12px; color: var(--red);
+        background: rgba(255,107,107,0.08);
+        border: 1px solid rgba(255,107,107,0.2);
+        border-radius: 8px; padding: 8px 10px;
+        line-height: 1.5;
+      }
     `}</style>
   );
 }
